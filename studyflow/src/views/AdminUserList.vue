@@ -1,5 +1,5 @@
 <template>
-  <div class="home-page">
+  <div class="admin-page">
     <!-- Component mạng nơ-ron chồng lên -->
     <NeuralNetworkBg />
 
@@ -216,7 +216,6 @@ const dropdownOpen = ref(false);
 const lockUser = (userId) => toggleUserLock(userId, true);
 const unlockUser = (userId) => toggleUserLock(userId, false);
 
-
 // Data cho quản lý người dùng
 const searchQuery = ref('')
 const statusFilter = ref('all')
@@ -390,10 +389,6 @@ const toggleUserLock = async (userId, shouldLock) => {
   }
 };
 
-// Chuyển trang Quản lý người dùng
-const goToAdminUserList = () => {
-  router.push('/adminuserlist');
-}
 
 //Chuyển trang Thống kê
 const goToAdminStats = () => {
@@ -439,7 +434,7 @@ onMounted(async () => {
 
 <style scoped>
 /* Giữ nguyên các style hiện có */
-.home-page {
+.admin-page {
   position: relative;
   height: 100vh;
   overflow: hidden;
@@ -612,6 +607,7 @@ onMounted(async () => {
   overflow: hidden;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   margin: 0 20px;
+  text-align: center;
 }
 
 .user-table {

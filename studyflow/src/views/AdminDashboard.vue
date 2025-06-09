@@ -1,5 +1,5 @@
 <template>
-  <div class="home-page">
+  <div class="admin-page">
     
     <!-- Component mạng nơ-ron chồng lên -->
     <NeuralNetworkBg />
@@ -134,7 +134,7 @@ const logout = () => {
 </script>
 
 <style scoped>
-.home-page {
+.admin-page {
   position: relative;
   height: 100vh;
   overflow: hidden;

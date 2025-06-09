@@ -106,8 +106,10 @@ const loginWithGoogle = async () => {
 const username = ref("");
 const password = ref("");
 
+
 // Xử lý đăng nhập
 const handleLogin = async () => {
+  // Validate input
   errors.username = username.value ? "" : "Tên đăng nhập không được để trống.";
   errors.password = password.value ? "" : "Mật khẩu không được để trống.";
 
@@ -124,27 +126,41 @@ const handleLogin = async () => {
 
     const { token, user } = response.data;
 
+    // Lưu thông tin đăng nhập
     localStorage.setItem("token", token);
     localStorage.setItem("user", JSON.stringify(user));
 
     alert("🎉 Đăng nhập thành công!");
 
-    // ➤ Phân quyền chuyển hướng
+    // Phân quyền chuyển hướng
     if (user.role === "admin") {
-      router.push("/admin"); // Chuyển đến trang admin
+      router.push("/admin");
     } else {
-      router.push("/home"); // Người dùng thường
+      router.push("/home");
     }
 
   } catch (error) {
-    console.error("Lỗi:", error);
+    console.error("Lỗi đăng nhập:", error);
+    
     if (error.response) {
-      alert("⚠️ " + error.response.data.detail);
+      switch (error.response.status) {
+        case 400:
+          alert("⚠️ Sai tài khoản hoặc mật khẩu!");
+          break;
+        case 403:
+          alert("⚠️ Tài khoản của bạn đã bị khóa");
+          break;
+        default:
+          alert("⚠️ " + (error.response.data.detail || "Có lỗi xảy ra. Vui lòng thử lại."));
+      }
     } else {
-      alert("❌ Lỗi kết nối server");
+      alert("❌ Lỗi kết nối server. Vui lòng kiểm tra kết nối mạng!");
     }
   }
 };
+
+
+
 
 
 </script>

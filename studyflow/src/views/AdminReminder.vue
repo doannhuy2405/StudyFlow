@@ -1,5 +1,5 @@
 <template>
-  <div class="home-page">
+  <div class="admin-page">
     
     <!-- Component mạng nơ-ron chồng lên -->
     <NeuralNetworkBg />
@@ -53,6 +53,24 @@
         </div>
       </div>
 
+      <div class="reminder-box">
+        <h2 class="reminder-title">⏰ Cài đặt giờ nhắc mặc định</h2>
+
+        <div class="form-group">
+          <label for="reminder-time">Chọn giờ nhắc:</label>
+          <input
+            id="reminder-time"
+            type="time"
+            v-model="reminderTime"
+            class="form-control time-input"
+          />
+        </div>
+
+        <button class="btn btn-outline-light mt-3" @click="saveReminder">Lưu cài đặt</button>
+
+        <p v-if="successMsg" class="text-success mt-3">{{ successMsg }}</p>
+        <p v-if="errorMsg" class="text-danger mt-3">{{ errorMsg }}</p>
+      </div>
 
     </div>
   </div>
@@ -68,6 +86,9 @@ import defaultAvatar from '../assets/image/Logo_app.png';
 
 const router = useRouter();
 const user = ref(null);
+const reminderTime = ref('');
+const successMsg = ref('');
+const errorMsg = ref('');
 
 const dropdownOpen = ref(false)
 function toggleDropdown() {
@@ -77,37 +98,85 @@ function toggleDropdown() {
 // Lấy thông tin admin
 const fetchAdminProfile = async () => {
   try {
-    const token = localStorage.getItem("token"); // Lấy token từ localStorage
-    if (!token) {
-      throw new Error("Token không tồn tại");
-    }
-
+    const token = localStorage.getItem("token");
     const response = await fetch("/api/auth/admin/profile", {
-      method: "GET",
       headers: {
-        Authorization: `Bearer ${token}`, // Gửi token trong header
-      },
+        'Authorization': `Bearer ${token}`
+      }
     });
 
     if (!response.ok) {
-      throw new Error(`Lỗi HTTP: ${response.status}`);
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log("Thông tin admin:", data);
-    return data;
+    return data; 
   } catch (error) {
-    console.error("Lỗi khi lấy thông tin admin:", error);
-    return null;
+    console.error("Error fetching admin profile:", error);
+    router.push("/login"); // Nếu lỗi, quay về login
   }
 };
 
+// Khởi tạo
 onMounted(async () => {
-  const adminData = await fetchAdminProfile();
-  if (adminData) {
-    user.value = adminData; 
+  const token = localStorage.getItem("token");
+  if (!token) {
+    router.push("/login");
+    return;
+  }
+  try {
+    const adminData = await fetchAdminProfile();
+
+    if (!adminData) {
+      router.push("/login");
+      return;
+    }
+    user.value = adminData;
+    // Gọi API sau khi xác thực thành công
+    await fetchStatistics();
+    // Lấy giờ nhắc
+    try {
+      const res = await fetch('/api/admin/reminder/default', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await res.json();
+      if (data?.time) {
+        reminderTime.value = data.time;
+      }
+    } catch (error) {
+      errorMsg.value = 'Không thể tải giờ nhắc.';
+    }
+  } catch (error) {
+    console.error("Lỗi khi khởi tạo:", error);
   }
 });
+
+
+const saveReminder = async () => {
+  successMsg.value = '';
+  errorMsg.value = '';
+  try {
+    const res = await fetch('/api/admin/reminder/default', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ time: reminderTime.value })
+    });
+
+    const result = await res.json();
+
+    if (res.ok) {
+      successMsg.value = '✅ Cập nhật giờ nhắc thành công!';
+    } else {
+      errorMsg.value = result?.msg || '❌ Lỗi khi cập nhật.';
+    }
+  } catch (error) {
+    errorMsg.value = '❌ Gặp lỗi khi gửi dữ liệu.';
+  }
+};
 
 // Chuyển trang Quản lý người dùng
 const goToAdminUserList = () => {
@@ -117,11 +186,6 @@ const goToAdminUserList = () => {
 //Chuyển trang Thống kê
 const goToAdminStats = () => {
   router.push('/adminstats');
-}
-
-//Chuyển trang Cài đặt
-const goToAdminReminder = () => {
-  router.push('/adminreminders');
 }
 
 // Đăng xuất
@@ -134,7 +198,7 @@ const logout = () => {
 </script>
 
 <style scoped>
-.home-page {
+.admin-page {
   position: relative;
   height: 100vh;
   overflow: hidden;
@@ -229,6 +293,38 @@ const logout = () => {
   z-index: 1000;
   border-radius: 10px;
   overflow: hidden;
+}
+
+.reminder-box {
+  margin: 0 auto;
+  left: 50%;
+  margin-top: 900px;
+  transform: translate(-50%, -50%);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  padding: 50px;
+  border-radius: 20px;
+  width: 400px;
+  text-align: center;
+  color: white;
+  position: absolute;
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+  z-index: 1;
+}
+
+.reminder-title {
+  font-size: 1.8em;
+  margin-bottom: 20px;
+}
+
+.time-input {
+  padding: 10px;
+  font-size: 1em;
+  border-radius: 10px;
+  width: 100%;
+  border: none;
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
 }
 
 </style>

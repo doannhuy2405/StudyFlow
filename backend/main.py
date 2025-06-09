@@ -6,18 +6,19 @@ import firebase_admin
 import json
 from datetime import datetime, timedelta
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Request, APIRouter
 from pymongo import MongoClient, ReturnDocument
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from firebase_admin import auth, credentials
-from datetime import datetime
+from datetime import datetime, timedelta
 from bson import ObjectId, json_util
 from models import UserLogin
 from fastapi.responses import JSONResponse
 from motor.motor_asyncio import AsyncIOMotorClient # type: ignore
+from collections import defaultdict
 
 #------------------------------Database---------------------------------------------------------
 # Load biến môi trường
@@ -186,12 +187,11 @@ async def register(user: UserRegister):
 async def login(user: UserLogin):
     print("Đăng nhập:", user.dict())
 
-    # phải await find_one
+    # Kiểm tra tài khoản admin
     admin = await admin_collection.find_one({"username": user.username})
     if admin and verify_password(user.password, admin["password"]):
         token_data = {"username": admin["username"], "role": "admin"}
         token = create_token(token_data)
-
         return {
             "token": token,
             "user": {
@@ -201,8 +201,14 @@ async def login(user: UserLogin):
             }
         }
 
+    # Kiểm tra tài khoản người dùng thường
     db_user = await users_collection.find_one({"username": user.username})
     if db_user and verify_password(user.password, db_user["password"]):
+
+        # ✅ Kiểm tra nếu tài khoản bị khóa
+        if db_user.get("locked", False):
+            raise HTTPException(status_code=403, detail="Tài khoản của bạn đã bị khóa")
+
         token_data = {"username": db_user["username"], "role": "user"}
         token = create_token(token_data)
 
@@ -217,24 +223,6 @@ async def login(user: UserLogin):
 
     raise HTTPException(status_code=400, detail="Sai tài khoản hoặc mật khẩu!")
 
-
-    # Kiểm tra trong bảng người dùng thường
-    db_user = users_collection.find_one({"username": user.username})
-    if db_user and verify_password(user.password, db_user["password"]):
-        token_data = {"username": db_user["username"], "role": "user"}
-        token = create_token(token_data)
-
-        return {
-            "token": token,
-            "user": {
-                "username": db_user["username"],
-                "fullname": db_user.get("fullname", ""),
-                "role": "user"
-            }
-        }
-
-    # Không tìm thấy tài khoản
-    raise HTTPException(status_code=400, detail="Sai tài khoản hoặc mật khẩu!")
     
     
 # Endpoint kiểm tra thông tin 
@@ -580,6 +568,8 @@ async def get_evaluations(user_id: str):
 
 #-------------------------------Admin APIs------------------------------------------------------
 
+router = APIRouter()
+
 # Lấy danh sách người dùng
 @app.get("/admin/users")
 async def get_users(token: str = Depends(oauth2_scheme)):
@@ -668,30 +658,67 @@ async def unlock_user(id: str, token: str = Depends(oauth2_scheme)):
         raise HTTPException(status_code=404, detail="User không tồn tại")
     return {"status": "unlocked"}
 
-# Thống kê tổng số người dùng
-@app.get("/admin/statistics/users")
+# Tổng số người dùng
+@router.get("/admin/statistics/users")
 async def total_users():
-    count = await users_collection.count_documents({})
-    return {"total_users": count}
+    cursor = users_collection.find({})
+    users = await cursor.to_list(length=None)
+    print("🔍 Có tổng", len(users), "user(s) trong DB:")
+    for u in users:
+        print(" -", u.get("username"), "| ID:", u.get("_id"))
+    return {"total_users": len(users)}
 
-# Thống kê tổng số giờ học toàn hệ thống
-@app.get("/admin/statistics/hours")
+
+
+# Tổng số giờ học 
+@router.get("/admin/statistics/hours")
 async def total_hours():
     cursor = studysessions_collection.find({"duration": {"$exists": True}})
-    total = sum([doc["duration"] async for doc in cursor])
-    return {"total_hours": total}
+    total_minutes = sum([doc["duration"] async for doc in cursor])  # duration = phút
+    total_hours = total_minutes // 60
+    remaining_minutes = total_minutes % 60
+    return {
+        "total_hours": total_hours,
+        "total_minutes": remaining_minutes
+    }
 
-# Thống kê tổng số bài học đã hoàn thành
-@app.get("/admin/statistics/lessons")
+
+# Tổng số bài học hoàn thành
+@router.get("/admin/statistics/lessons")
 async def total_completed_lessons():
     count = await lessons_collection.count_documents({"status": "completed"})
-    return {"total_completed_lessons": count}
+    return {"total_lessons": count}
 
-# Mức độ hoạt động trung bình theo ngày/tuần
-@app.get("/admin/statistics/active-level")
+
+# Mức độ hoạt động trung bình theo ngày / tuần
+@router.get("/admin/statistics/active-level")
 async def active_level():
-    # Placeholder logic
-    return {"daily_avg": 3.5, "weekly_avg": 24.5}
+    # Lấy các phiên học có timestamp
+    cursor = studysessions_collection.find({"timestamp": {"$exists": True}})
+    activity_by_date = defaultdict(int)
+
+    async for doc in cursor:
+        ts = doc.get("timestamp")
+        if ts:
+            # Chuyển timestamp sang dạng ngày (yyyy-mm-dd)
+            date = ts.date() if isinstance(ts, datetime) else datetime.fromisoformat(ts).date()
+            activity_by_date[date] += 1
+
+    total_days = len(activity_by_date)
+    total_sessions = sum(activity_by_date.values())
+
+    # Trung bình theo ngày & tuần
+    daily_avg = round(total_sessions / total_days, 2) if total_days else 0
+    weekly_avg = round(daily_avg * 7, 2)
+
+    return {
+        "avg_per_day": daily_avg,
+        "avg_per_week": weekly_avg
+    }
+    
+
+app.include_router(router)
+
 
 # Đặt giờ nhắc mặc định cho hệ thống
 @app.post("/admin/reminder/default")
