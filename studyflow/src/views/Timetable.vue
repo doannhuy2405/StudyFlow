@@ -15,6 +15,7 @@
       <!-- Giữa -->
       <ul class="nav nav-tabs center-nav">
         <li class="nav-item"><a class="nav-link" href="#" @click="goToHome">Trang chủ</a></li>
+        <li class="nav-item"><a class="nav-link" href="#" @click="goToUserStats">Thống kê</a></li>
         <li class="nav-item"><a class="nav-link active" aria-current="page" href="#">Thời khóa biểu</a></li>
         <li class="nav-item"><a class="nav-link" href="#" @click="goToNotifications">Thông báo</a></li>
       </ul>
@@ -127,6 +128,11 @@ const goToHome = () => {
   router.push('/home');
 }
 
+//Chuyển trang Thống kê
+const goToUserStats = () => {
+  router.push('/userstats');
+}
+
 // Đăng xuất
 const logout = () => {
     localStorage.removeItem("token");
@@ -187,7 +193,7 @@ const logout = () => {
 }
 
 .nav-link:hover {
-  background-color: rgba(255,255,255,0.1);
+  background-color: rgba(208, 204, 204, 0.844);
   border-radius: 8px;
 }
 
@@ -199,7 +205,7 @@ const logout = () => {
 
 .center-nav {
   display: flex;
-  gap: 25px;
+  gap: 15px;
   list-style: none;
   padding: 0;
   margin: 0;
@@ -210,7 +216,8 @@ const logout = () => {
   align-items: center;
   justify-content: flex-end;
   flex: 1;
-  padding-right: 40px; /* canh khoảng cách với mép phải */
+  padding-right: 5px; /* canh khoảng cách với mép phải */
+  gap: 15px;
 }
 
  .avatar {

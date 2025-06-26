@@ -6,7 +6,7 @@
 
     <!-- Content chính -->
     <div class="content">
-      <h1 style="font-size: 3.5em;">StudyFlow</h1>
+      <h1 style="font-size: 4.5em; text-align: center;">StudyFlow</h1>
 
       <!-- Khung đăng ký -->
          <div class="auth-form">

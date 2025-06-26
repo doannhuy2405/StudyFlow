@@ -142,7 +142,7 @@ const quotes = [
   "Mỗi con người ưu tú mà hôm nay bạn thấy, họ đều trải qua những quá trình khổ luyện. Và nhớ nhé, chưa ai chết đuối trong mồ hôi của chính mình cả.",
   "Những kẻ mạnh không phải lúc nào cũng chiến thắng, mà kẻ chiến thắng mới là kẻ mạnh.",
   "Nếu bạn cảm thấy mông lung và thiếu động lực để cố gắng thì hãy nhớ rằng: món đồ bạn thích rất đắt đỏ, người bạn thích rất ưu tú. Và thế giới rộng lớn, đẹp đẽ đến như vậy, bố mẹ bạn xứng đáng được nhìn ngắm một lần.",
-  "Khi còn trẻ thì người ta sẽ nhìn vào báo mẹ của các bạn để người ta đối xử với các bạn. Khi các bạn lớn lên rồi, người ta sẽ nhìn vào các bạn để đối xử với bố mẹ các bạn.",
+  "Khi còn trẻ thì người ta sẽ nhìn vào ba mẹ của các bạn để người ta đối xử với các bạn. Khi các bạn lớn lên rồi, người ta sẽ nhìn vào các bạn để đối xử với bố mẹ các bạn.",
   "Phải nhớ rằng: 'Tốc độ thành công của bạn luôn luôn phải nhanh hơn tốc độ già đi của bố mẹ bạn!', bạn phải luôn nhớ điều đó, phải tâm tâm niệm niêm điều đó.",
   "Hãy học khi người khác ngủ, lao động khi người khác lười nhác, chuẩn bị khi người khác chơi bời. Rồi bạn sẽ đạt được ước mơ khi người khác chỉ ao ước. Hãy nhớ!",
   "Khi bạn đang thoải mái nằm, đừng quên người khác đang cố gắng chạy!",
@@ -170,7 +170,16 @@ const quotes = [
   "Đừng để những thành tích người khác khoe khiến bạn cảm thấy mình kém ỏi. Ai cũng chỉ muốn cho thế giới thấy mặt rực rỡ nhất của mình. Bạn chỉ cần kiên định với con đường mình đã chọn và vững vàng tiến bước đến đích cuối cùng.",
   "Hào quang không đến từ may mắn. Nó đến từ những đêm cày nát tập, mà không ai thấy.",
   "Học đi, rồi bạn sẽ thấy, thay vì lo lắng mình có đủ tốt không. Bạn sẽ bắt đầu tự tin rằng: 'Mình xứng đáng hơn cả thế!'.",
-  "Tôi không sinh ra để thua. Tôi sinh ra để chiến thẳng.",
+  "Tôi không sinh ra để thua. Tôi sinh ra để chiến thắng.",
+  "Giống như một quặng sắt, nó không thể biến thành vàng. Nhưng nếu được rèn giũa đúng cách, nó sẽ trở thành một lưỡi dao sắt bén, cắt gọt những thỏi vàng.",
+  "Điều khiến ta gục ngã không phải là những lời chê bai, mà là vì ta cho phép điều đó định nghĩa giá trị của mình. Đừng thu mình để vừa vặn với cái nhìn của người khác, bởi vì không cần một chiếc khung, ta vẫn có thể tự vẽ nên bức trang của chính mình.",
+  "Sức mạnh không đến từ xuất thân mà đến từ ý chí, nghị lực và trái tim của mỗi con người. Hãy luôn tin vào giá trị của bản thân. Bạn là duy nhất và đó là sức mạnh!",
+  "Không cần phải hoàn hảo để trở nên tỏa sáng, chỉ cần là chính mình sẽ tỏa sáng!",
+  "Bãn lĩnh không phải là không gục ngã, mà là dám mạnh mẽ đứng dậy, để chạm tay vào ước mơ thêm một lần nữa!",
+  "Không có đơn vị nào đo lường cho sự thành công hay thất bại!",
+  "Tương lai không được chờ đợi mà nó được tạo ra!",
+  "Kỳ tích chỉ nở hoa trên mảnh đất của lòng dũng cảm!",
+  "Chiều cao không tính bằng số đo, mà nó được tính từ đỉnh đầu cho tới bầu trời của những ước mơ.",
 ]
 
 const randomQuote = ref ('')

@@ -12,12 +12,6 @@
         <h1 style="font-size: 4em;">StudyFlow</h1>
       </div>
 
-      <!-- Giữa -->
-      <ul class="nav nav-tabs center-nav">
-        <li class="nav-item"><a class="nav-link" aria-current="page" href="#">Trang chủ</a></li>
-        <li class="nav-item"><a class="nav-link" href="#">Thời khóa biểu</a></li>
-        <li class="nav-item"><a class="nav-link" href="#">Thông báo</a></li>
-      </ul>
       
       <!-- Phải -->
        <div class="right">

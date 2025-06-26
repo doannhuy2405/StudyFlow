@@ -82,7 +82,7 @@
         <table class="user-table">
           <thead>
             <tr>
-              <th>ID</th>
+              <th>Họ tên</th>
               <th>Thông tin</th>
               <th>Tên đăng nhập</th>
               <th>Trạng thái</th>
@@ -91,11 +91,11 @@
           </thead>
           <tbody>
             <tr v-for="user in filteredUsers" :key="user._id">
-              <td class="user-id">{{ user._id }}</td>
+              <td class="user-fullname" style="color: white;">{{ user.fullname}}</td>
               <td class="user-info">
                 <img :src="user.photo || defaultAvatar" class="user-avatar">
                 <div class="user-details">
-                  <div class="user-name">{{ user.fullname }}</div>
+
                   <div class="user-email">{{ user.email }}</div>
                 </div>
               </td>
@@ -248,7 +248,7 @@ const filteredUsers = computed(() => {
       user.username.toLowerCase().includes(query)
     );
   }
-  
+  console.log('Hwllo:', result);
   return result;
 });
 
@@ -472,7 +472,7 @@ onMounted(async () => {
 }
 
 .nav-link:hover {
-  background-color: rgba(255,255,255,0.1);
+  background-color: rgba(208, 204, 204, 0.844);
   border-radius: 8px;
 }
 
@@ -623,9 +623,10 @@ onMounted(async () => {
   color: #a6b0cf;
 }
 
-.user-table td {
-  padding: 15px;
+.user-table tr {
+  padding: 5px;
   border-bottom: 1px solid #2d3653;
+  vertical-align: middle;
 }
 
 .user-table tr:last-child td {
@@ -636,6 +637,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 12px;
+  vertical-align: middle;
 }
 
 .user-avatar {
@@ -644,16 +646,19 @@ onMounted(async () => {
   border-radius: 50%;
   object-fit: cover;
   border: 2px solid #3a4568;
+  vertical-align: middle;
 }
 
 .user-details {
   display: flex;
   flex-direction: column;
+  vertical-align: middle;
 }
 
 .user-name {
   font-weight: 600;
   margin-bottom: 5px;
+  color: red;
 }
 
 .user-email {
@@ -686,13 +691,14 @@ onMounted(async () => {
 }
 
 .status-badge.locked {
-  background-color: rgba(231, 76, 60, 0.2);
-  color: #e74c3c;
+  background-color: rgba(202, 26, 6, 0.694);
+  color: #e43825;
 }
 
 .user-actions {
   display: flex;
   gap: 8px;
+  vertical-align: middle;
 }
 
 .action-btn {
@@ -716,18 +722,18 @@ onMounted(async () => {
 }
 
 .lock-btn {
-  background-color: rgba(241, 196, 15, 0.2);
-  color: #f1c40f;
+  background-color: rgb(228, 246, 139);
+  color: #f7e498;
 }
 
 .unlock-btn {
-  background-color: rgba(46, 204, 113, 0.2);
-  color: #2ecc71;
+  background-color: rgb(114, 255, 173);
+  color: #00b14a;
 }
 
 .delete-btn {
-  background-color: rgba(231, 76, 60, 0.2);
-  color: #e74c3c;
+  background-color: rgb(255, 120, 105);
+  color: #fa513e;
 }
 
 /* Modal styles */
@@ -741,7 +747,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 1;
 }
 
 .modal-content {
@@ -751,6 +757,7 @@ onMounted(async () => {
   max-width: 500px;
   overflow: hidden;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  padding: 20px ;
 }
 
 .modal-header {
@@ -776,7 +783,7 @@ onMounted(async () => {
 }
 
 .modal-body {
-  padding: 20px;
+  padding: 25px;
 }
 
 .form-group {

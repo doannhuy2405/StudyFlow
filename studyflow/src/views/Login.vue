@@ -6,7 +6,7 @@
 
     <!-- Content chính -->
     <div class="content">
-      <h1 style="font-size: 3.5em;">StudyFlow</h1>
+      <h1 style="font-size: 4.5em; text-align: center;">StudyFlow</h1>
 
       <!-- Khung đăng nhập -->
         <div class="auth-form">
@@ -82,6 +82,12 @@ const loginWithGoogle = async () => {
     if (response.data.success) {
       console.log("Đăng nhập thành công:", response.data)
       localStorage.setItem('token', response.data.token)
+      localStorage.setItem("user", JSON.stringify({
+        id: data.id,             
+        username: data.username,
+        fullname: data.fullname,
+        role: data.role
+      }));
       router.push('/home') // Chuyển hướng sau khi đăng nhập
     } else {
       errors.google = response.data.message || "Đăng nhập thất bại"
@@ -126,6 +132,19 @@ const handleLogin = async () => {
 
     const { token, user } = response.data;
 
+    // Kiểm tra lại trong console
+    console.log("Thông tin user nhận được:", user);
+
+    // Lưu thông tin đầy đủ
+    localStorage.setItem("token", token);
+    localStorage.setItem("user", JSON.stringify({
+      id: user.id,                  
+      username: user.username,
+      fullname: user.fullname,
+      role: user.role
+    }));
+
+
     // Lưu thông tin đăng nhập
     localStorage.setItem("token", token);
     localStorage.setItem("user", JSON.stringify(user));
@@ -158,9 +177,6 @@ const handleLogin = async () => {
     }
   }
 };
-
-
-
 
 
 </script>

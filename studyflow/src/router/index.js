@@ -13,6 +13,9 @@ import AdminUserList from '@/views/AdminUserList.vue'
 import AdminStats from '@/views/AdminStats.vue'
 import AdminReminder from '@/views/AdminReminder.vue'
 import AdminDashboard from '@/views/AdminDashboard.vue'
+import UserStats from '@/views/UserStats.vue'
+import AddTopic from '@/views/AddTopic.vue'
+import Clock from '@/views/Clock.vue'
 
 
 const routes = [
@@ -85,6 +88,21 @@ const routes = [
       path: '/adminreminders',
       name: 'adminreminders',
       component: AdminReminder,
+    },
+    {
+      path: '/userstats',
+      name: 'userstats',
+      component: UserStats,
+    },
+    {
+      path: '/addtopic',
+      name: 'addtopic',
+      component: AddTopic,
+    },
+        {
+      path: '/clock',
+      name: 'clock',
+      component: Clock,
     },
   ];
 
