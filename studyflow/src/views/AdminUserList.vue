@@ -635,7 +635,7 @@ onMounted(async () => {
 
 .user-info {
   display: flex;
-  align-items: center;
+  place-items: center;
   gap: 12px;
   vertical-align: middle;
 }

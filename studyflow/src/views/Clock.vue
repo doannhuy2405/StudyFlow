@@ -63,7 +63,7 @@
             <i class="fas fa-play-circle"></i> Bắt đầu học
           </button>
           <button class="btn btn-outline-success" @click="startPomodoroMode">
-            <i class="fas fa-stopwatch"></i> Pomodoro 25'
+            <i class="fas fa-stopwatch"></i> Pomodoro 50'
           </button>
         </div>
       </div>
@@ -86,8 +86,8 @@
         </div>
       </div>
 
-      <div class="history-container">
-      ` <h2>Lịch sử học tập</h2>
+      <div class="history-container" v-if="filteredStudyHistory.length > 0">
+        <h2>Lịch sử học tập</h2>
         <table class="table table-dark table-bordered mt-3">
           <thead>
             <tr>
@@ -95,14 +95,16 @@
               <th>Bắt đầu</th>
               <th>Kết thúc</th>
               <th>Thời lượng (phút)</th>
+              <th>Loại học</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(session, index) in studyHistory" :key="index">
+            <tr v-for="(session, index) in filteredStudyHistory" :key="index">
               <td>{{ formatDate(session.start) }}</td>
               <td>{{ formatTime(session.start) }}</td>
               <td>{{ formatTime(session.end) }}</td>
-              <td>{{ typeof session.duration === 'number' ? (session.duration / 60).toFixed(1) : '---' }}</td>
+              <td>{{ session.duration ? (Number(session.duration) / 60).toFixed(1) : '—' }}</td>
+              <td>{{ session.type === 'pomodoro' ? 'Pomodoro' : 'Đếm giờ' }}</td>
             </tr>
           </tbody>
         </table>
@@ -128,6 +130,11 @@ const studyHistory = ref([])
 let timerInterval = null
 const elapsedSeconds = ref(0)
 const countdownSeconds = ref(25 * 60)
+
+const filteredStudyHistory = computed(() => {
+  return studyHistory.value.filter(s => s.start && s.end && s.duration);
+});
+
 
 const formatDate = (isoString) => {
   const date = new Date(isoString)
@@ -217,7 +224,6 @@ const startStudyMode = async () => {
 }
 
 
-
 // Dừng học
 const stopTracking = async () => {
   clearInterval(timerInterval)
@@ -258,7 +264,7 @@ const startPomodoroMode = async () => {
     if (!res.ok) throw new Error("Không thể bắt đầu Pomodoro");
 
     isPomodoro.value = true;
-    countdownSeconds.value = 25 * 60;
+    countdownSeconds.value = 50 * 60;
     timerInterval = setInterval(() => {
       countdownSeconds.value--;
       if (countdownSeconds.value <= 0) {
@@ -294,6 +300,7 @@ const fetchStudyHistory = async () => {
         "Authorization": `Bearer ${token}`, // 🟢 Gửi token vào header
       }
     });
+    
 
     if (!res.ok) throw new Error("Không thể lấy lịch sử học tập");
     const data = await res.json();

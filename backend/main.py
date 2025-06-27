@@ -681,15 +681,26 @@ async def start_tracking(request: Request):
     if not user_id:
         raise HTTPException(status_code=401, detail="Chưa xác thực người dùng")
 
+    try:
+        obj_user_id = ObjectId(user_id)
+    except errors.InvalidId:
+        raise HTTPException(status_code=400, detail="user_id không hợp lệ")
+
+    # Chỉ thêm session nếu không có session nào chưa kết thúc
+    existing_session = await studysessions_collection.find_one({
+        "user_id": obj_user_id,
+        "end": {"$exists": False}
+    })
+
+    if existing_session:
+        return {"msg": "Session đang chạy đã tồn tại"}
+
     session = {
-        "user_id": user_id,
+        "user_id": obj_user_id,
         "start": datetime.utcnow()
     }
     await studysessions_collection.insert_one(session)
     return {"msg": "Tracking started"}
-
-
-
 
 
 # Dừng đồng hộ và lưu thời gian học
@@ -699,19 +710,23 @@ async def stop_tracking(request: Request):
     if not user_id:
         raise HTTPException(status_code=401, detail="Chưa xác thực người dùng")
 
-    session = await studysessions_collection.find_one(
-        {"user_id": ObjectId(user_id)},
-        sort=[("start", -1)]
-    )
+    # ✅ Chỉ lấy session chưa kết thúc
+    session = await studysessions_collection.find_one({
+        "user_id": ObjectId(user_id),
+        "end": {"$exists": False}
+    }, sort=[("start", -1)])
+
     if not session:
-        raise HTTPException(status_code=404, detail="No active session")
+        raise HTTPException(status_code=404, detail="Không có session nào đang chạy")
 
     end_time = datetime.utcnow()
     duration = (end_time - session["start"]).total_seconds()
+
     await studysessions_collection.update_one(
         {"_id": session["_id"]},
         {"$set": {"end": end_time, "duration": duration}}
     )
+
     return {"duration": duration}
 
 
@@ -740,7 +755,7 @@ async def start_pomodoro(request: Request):
     return {
         "msg": "Đã bắt đầu Pomodoro và lưu vào lịch sử",
         "start": start_time,
-        "duration_minutes": 25
+        "duration_minutes": 50
     }
 
 
