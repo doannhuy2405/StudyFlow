@@ -6,7 +6,7 @@ import firebase_admin
 import uuid
 import asyncio
 import mimetypes
-import pytz
+import pytz # type: ignore
 from datetime import datetime, timedelta
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, Depends, Request, APIRouter, UploadFile, File, APIRouter
@@ -29,8 +29,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from collections import defaultdict
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
+from apscheduler.schedulers.asyncio import AsyncIOScheduler # type: ignore
+from apscheduler.triggers.cron import CronTrigger # type: ignore
 
 
 #-----------------------------------------------------Database-----------------------------------------------
@@ -474,13 +474,7 @@ class TopicCreate(BaseModel):
     name: str
     description: str
     lessons: List[LessonItem] = []
-    
-class LessonUpdate(BaseModel):
-    name: Optional[str] = None
-    note: Optional[str] = ""
-    planned_date: Optional[str] = ""
-    status: Optional[str] = "not_done"
-    topic_id: Optional[str] = None
+
 
 class HabitSetup(BaseModel):
     user_id: str
@@ -1100,14 +1094,14 @@ async def upload_document_to_lesson(
     topic_id: str,
     lesson_id: str,
     request: Request,
-    file: UploadFile = File(...),
+    files: List[UploadFile] = File(...),  # Thay đổi từ file thành files
 ):
-    """Upload tài liệu vào bài học cụ thể"""
+    """Upload nhiều tài liệu vào bài học"""
     user_id = request.state.user_id
     if not user_id:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    # Kiểm tra bài học tồn tại và thuộc về user
+    # Kiểm tra bài học tồn tại
     lesson = await lessons_collection.find_one({
         "_id": ObjectId(lesson_id),
         "topic_id": ObjectId(topic_id),
@@ -1116,56 +1110,62 @@ async def upload_document_to_lesson(
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
 
-    # Tạo thư mục theo cấu trúc: uploads/topics/{topic_id}/lessons/{lesson_id}
+    # Tạo thư mục lưu trữ
     topic_dir = os.path.join(UPLOAD_DIR, f"topics_{topic_id}")
     lesson_dir = os.path.join(topic_dir, f"lessons_{lesson_id}")
     os.makedirs(lesson_dir, exist_ok=True)
 
-    # Tạo tên file duy nhất nhưng giữ nguyên đuôi file
-    file_ext = Path(file.filename).suffix.lower()
-    unique_filename = f"{uuid.uuid4().hex}{file_ext}"
-    file_path = os.path.join(lesson_dir, unique_filename)
+    uploaded_documents = []
+    
+    for file in files:
+        try:
+            # Tạo tên file duy nhất
+            file_ext = Path(file.filename).suffix.lower()
+            unique_filename = f"{uuid.uuid4().hex}{file_ext}"
+            file_path = os.path.join(lesson_dir, unique_filename)
 
-    # Lưu file vật lý
-    try:
-        file_size = 0
-        with open(file_path, "wb") as buffer:
-            while chunk := await file.read(1024 * 1024):  # Đọc từng chunk 1MB
-                file_size += len(chunk)
-                buffer.write(chunk)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error saving file: {str(e)}")
+            # Lưu file vật lý
+            file_size = 0
+            with open(file_path, "wb") as buffer:
+                while chunk := await file.read(1024 * 1024):  # 1MB chunks
+                    file_size += len(chunk)
+                    buffer.write(chunk)
 
-    # Tạo document info
-    document_info = DocumentInfo(
-        id=str(uuid.uuid4()),
-        original_name=file.filename,
-        saved_name=unique_filename,
-        file_path=f"/uploads/topics_{topic_id}/lessons_{lesson_id}/{unique_filename}",
-        content_type=file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream",
-        size=file_size,
-        uploaded_at=datetime.now().isoformat()
-    )
+            # Tạo document info
+            document_info = DocumentInfo(
+                id=str(uuid.uuid4()),
+                original_name=file.filename,
+                saved_name=unique_filename,
+                file_path=f"/uploads/topics_{topic_id}/lessons_{lesson_id}/{unique_filename}",
+                content_type=file.content_type or "application/octet-stream",
+                size=file_size,
+                uploaded_at=datetime.now().isoformat()
+            )
+            
+            uploaded_documents.append(document_info.dict())
 
-    # Cập nhật vào bài học
-    update_result = await lessons_collection.update_one(
-        {"_id": ObjectId(lesson_id)},
-        {"$push": {"documents": document_info.dict()}}
-    )
+        except Exception as e:
+            # Nếu có lỗi, tiếp tục với các file khác
+            print(f"Error uploading file {file.filename}: {str(e)}")
+            continue
 
-    if update_result.modified_count == 0:
-        os.remove(file_path)  # Rollback nếu không cập nhật được
-        raise HTTPException(status_code=500, detail="Failed to update lesson")
+    # Cập nhật vào bài học (thêm tất cả documents cùng lúc)
+    if uploaded_documents:
+        update_result = await lessons_collection.update_one(
+            {"_id": ObjectId(lesson_id)},
+            {"$push": {"documents": {"$each": uploaded_documents}}}
+        )
 
     return JSONResponse(
         status_code=201,
         content={
-            "message": "File uploaded successfully",
-            "document": document_info.dict(),
-            "preview_url": f"/topics/{topic_id}/lessons/{lesson_id}/documents/{document_info.id}/preview"
+            "message": f"Upload thành công {len(uploaded_documents)}/{len(files)} file",
+            "uploaded_documents": uploaded_documents
         }
     )
+    
 
+# Lấy danh sách tài liệu trong bài học 
 @app.get("/topics/{topic_id}/lessons/{lesson_id}/documents")
 async def list_lesson_documents(
     topic_id: str,
@@ -1191,6 +1191,8 @@ async def list_lesson_documents(
 
     return lesson.get("documents", [])
 
+
+# Xem thông tin chi tiết của tài liệu
 @app.get("/topics/{topic_id}/lessons/{lesson_id}/documents/{document_id}")
 async def get_document_info(
     topic_id: str,

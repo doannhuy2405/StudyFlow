@@ -123,6 +123,44 @@
                 <button class="btn btn-outline-info" @click="editLesson(lesson)">Sửa</button>
                 <button class="btn btn-outline-danger" @click="deleteLesson(lesson.id, lesson.topic_id)">Xóa</button>
               </div>
+
+              <!-- FORM SỬA BÀI HỌC -->
+              <div v-if="editingLessonId === lesson.id" class="mt-3 bg-secondary p-3 rounded">
+                <div class="mb-2">
+                  <label class="form-label text-white">Tên bài học:</label>
+                  <input v-model="editedLesson.name" type="text" class="form-control" />
+                </div>
+                <div class="mb-2">
+                  <label class="form-label text-white">Ghi chú:</label>
+                  <input v-model="editedLesson.note" type="text" class="form-control" />
+                </div>
+                <div class="mb-3">
+                  <label class="form-label text-white">Ngày học dự kiến:</label>
+                  <input v-model="editedLesson.due_date" type="date" class="form-control" />
+                </div>
+                <div class="mb-3">
+                  <label class="form-label text-white">Thêm tài liệu mới (PDF, ảnh...):</label>
+                  <input
+                    type="file"
+                    class="form-control"
+                    multiple
+                    @change="handleEditFileUpload"
+                  />
+                  <div v-if="editedFiles.length > 0" class="mt-2">
+                    <div v-for="(file, index) in editedFiles" :key="index" class="d-flex align-items-center mb-1">
+                      <span class="text-white me-2">{{ file.name }}</span>
+                      <button class="btn btn-sm btn-outline-danger" @click="editedFiles.splice(index, 1)">
+                        <i class="fas fa-times"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="d-flex gap-2">
+                  <button class="btn btn-success btn-sm" @click="handleEditLessonSubmit(lesson)">Lưu</button>
+                  <button class="btn btn-secondary btn-sm" @click="cancelEditLesson">Hủy</button>
+                </div>
+              </div>
+
             </li>
           </ul>
 
@@ -153,7 +191,24 @@
             </div>
             <div class="mb-3">
               <label class="form-label text-white">Tài liệu đính kèm (PDF, hình ảnh...):</label>
-              <input type="file" class="form-control" @change="handleFileUpload" />
+              <input 
+                type="file" 
+                class="form-control" 
+                multiple
+                @change="handleMultipleFilesUpload"
+              />
+              <!-- Hiển thị danh sách file đã chọn -->
+              <div v-if="selectedFiles.length > 0" class="mt-2">
+                <div v-for="(file, index) in selectedFiles" :key="index" class="d-flex align-items-center mb-1">
+                  <span class="text-white me-2">{{ file.name }}</span>
+                  <button 
+                    @click="removeFile(index)"
+                    class="btn btn-sm btn-outline-danger"
+                  >
+                    <i class="fas fa-times"></i>
+                  </button>
+                </div>
+              </div>
             </div>
             <div class="d-flex gap-2">
               <button class="btn btn-success btn-sm" @click="submitNewLesson(topic._id)">Lưu</button>
@@ -184,7 +239,15 @@ const lessonsMap = ref({})
 const activeTopic = ref(null)
 const loadingTopics = ref(false)
 const loadingLessons = ref({})
-const selectedDocumentUrl = ref(null)
+const selectedFiles = ref([])
+
+const editingLessonId = ref(null)
+const editedLesson = ref({
+  name: '',
+  note: '',
+  due_date: ''
+})
+const editedFiles = ref([])
 
 const showAddLessonForm = ref(null)
 const newLesson = ref({
@@ -206,13 +269,24 @@ const cancelAddLesson = () => {
   showAddLessonForm.value = null
 }
 
+// Xử lý chọn nhiều file
+const handleMultipleFilesUpload = (event) => {
+  selectedFiles.value = Array.from(event.target.files)
+}
+
+// Xóa file khỏi danh sách
+const removeFile = (index) => {
+  selectedFiles.value.splice(index, 1)
+}
+
 const submitNewLesson = async (topicId) => {
-  if (!newLesson.value.name || !newLesson.value.due_date) {
-    alert("Vui lòng điền tên và ngày học!");
+  if (!newLesson.value.name) {
+    alert("Vui lòng điền tên bài học!");
     return;
   }
 
   try {
+    // 1. Tạo bài học
     const res = await fetch(`/api/topics/${topicId}/lessons`, {
       method: 'POST',
       headers: {
@@ -223,20 +297,22 @@ const submitNewLesson = async (topicId) => {
         name: newLesson.value.name,
         note: newLesson.value.note,
         due_date: newLesson.value.due_date,
-        status: 'chưa hoàn thành'
+        status: 'not_done'
       })
     });
 
     if (!res.ok) throw new Error("Lỗi khi thêm bài học!");
-
     const data = await res.json();
+    const lessonId = data.lesson._id;
 
-    // ⬇️ Nếu có file, thực hiện upload vào bài học vừa tạo
-    if (selectedFile.value) {
+    // 2. Upload file (nếu có)
+    if (selectedFiles.value.length > 0) {
       const formData = new FormData();
-      formData.append("file", selectedFile.value);
+      for (const file of selectedFiles.value) {
+        formData.append("files", file);
+      }
 
-      const uploadRes = await fetch(`/api/topics/${topicId}/lessons/${data.lesson._id}/upload`, {
+      const uploadRes = await fetch(`/api/topics/${topicId}/lessons/${lessonId}/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem("token")}`
@@ -245,19 +321,93 @@ const submitNewLesson = async (topicId) => {
       });
 
       if (!uploadRes.ok) {
-        alert("Thêm bài học thành công nhưng upload tài liệu thất bại.");
+        const errorText = await uploadRes.text();
+        throw new Error("Upload file thất bại: " + errorText);
       }
     }
 
-    // ✅ Thành công
+    // 3. Cập nhật UI
     await loadLessons(topicId);
     showAddLessonForm.value = null;
-    selectedFile.value = null;
-    alert("Đã thêm bài học thành công!");
+    selectedFiles.value = [];
+    alert("Thêm bài học và tài liệu thành công!");
 
   } catch (err) {
-    console.error("❌ Lỗi thêm bài học:", err);
-    alert("Thêm bài học thất bại.");
+    console.error("Lỗi thêm bài học:", err);
+    alert("Thêm bài học thất bại: " + err.message);
+  }
+};
+
+// Hàm mở form sửa bài học
+const editLesson = (lesson) => {
+  editingLessonId.value = lesson.id
+  editedLesson.value = {
+    name: lesson.name,
+    note: lesson.note,
+    due_date: lesson.due_date?.slice(0, 10) || '' 
+  }
+  editedFiles.value = []
+}
+
+const handleEditFileUpload = (event) => {
+  editedFiles.value = Array.from(event.target.files)
+}
+
+const cancelEditLesson = () => {
+  editingLessonId.value = null
+  editedLesson.value = {
+    name: '',
+    note: '',
+    due_date: ''
+  }
+  editedFiles.value = []
+}
+
+const handleEditLessonSubmit = async (lesson) => {
+  try {
+    const updateRes = await fetch(`/api/lessons/${lesson.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: editedLesson.value.name,
+        note: editedLesson.value.note,
+        due_date: editedLesson.value.due_date + "T00:00:00.000Z"
+      })
+    })
+
+    if (!updateRes.ok) {
+      const error = await updateRes.json()
+      alert("Lỗi cập nhật bài học: " + error.detail)
+      return
+    }
+
+    // Upload file mới nếu có
+    if (editedFiles.value.length > 0) {
+      const formData = new FormData()
+      for (const file of editedFiles.value) {
+        formData.append("files", file)
+      }
+
+      const uploadRes = await fetch(`/api/topics/${lesson.topic_id}/lessons/${lesson.id}/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem("token")}`
+        },
+        body: formData
+      })
+
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text()
+        throw new Error("Upload file thất bại: " + errText)
+      }
+    }
+
+    alert("Cập nhật bài học thành công!")
+    await loadLessons(lesson.topic_id)
+    cancelEditLesson()
+  } catch (err) {
+    console.error("Lỗi khi cập nhật bài học:", err)
+    alert("Cập nhật thất bại!")
   }
 }
 
@@ -451,46 +601,46 @@ const loadLessons = async (topicId) => {
 };
 
 
-// Sửa thông tin bài học
-const editLesson = async (lesson) => {
-  const newName = prompt("Tên mới:", lesson.name);
-  const newNote = prompt("Ghi chú mới:", lesson.note);
-  const newDate = prompt("Ngày học dự kiến mới (YYYY-MM-DD):", lesson.due_date);
+// // Sửa thông tin bài học
+// const editLesson = async (lesson) => {
+//   const newName = prompt("Tên mới:", lesson.name);
+//   const newNote = prompt("Ghi chú mới:", lesson.note);
+//   const newDate = prompt("Ngày học dự kiến mới (YYYY-MM-DD):", lesson.due_date);
 
-  // Validate date format
-  if (newDate && !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
-    alert("Sai định dạng ngày (YYYY-MM-DD)");
-    return;
-  }
+//   // Validate date format
+//   if (newDate && !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+//     alert("Sai định dạng ngày (YYYY-MM-DD)");
+//     return;
+//   }
 
-  const updateData = {};
-  if (newName !== null && newName !== lesson.name) updateData.name = newName;
-  if (newNote !== null && newNote !== lesson.note) updateData.note = newNote;
-  if (newDate !== null && newDate !== lesson.due_date) {
-    updateData.due_date = newDate + "T00:00:00.000Z"; // Thêm timezone nếu cần
-  }
+//   const updateData = {};
+//   if (newName !== null && newName !== lesson.name) updateData.name = newName;
+//   if (newNote !== null && newNote !== lesson.note) updateData.note = newNote;
+//   if (newDate !== null && newDate !== lesson.due_date) {
+//     updateData.due_date = newDate + "T00:00:00.000Z"; // Thêm timezone nếu cần
+//   }
 
-  if (Object.keys(updateData).length === 0) return;
+//   if (Object.keys(updateData).length === 0) return;
 
-  try {
-    const response = await fetch(`/api/lessons/${lesson.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updateData),
-    });
+//   try {
+//     const response = await fetch(`/api/lessons/${lesson.id}`, {
+//       method: 'PUT',
+//       headers: { 'Content-Type': 'application/json' },
+//       body: JSON.stringify(updateData),
+//     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      alert(`Lỗi: ${error.detail}`);
-    } else {
-      alert("Cập nhật thành công!");
-      await loadLessons(lesson.topic_id);
-    }
-  } catch (error) {
-    console.error("Lỗi khi cập nhật:", error);
-    alert("Có lỗi xảy ra!");
-  }
-};
+//     if (!response.ok) {
+//       const error = await response.json();
+//       alert(`Lỗi: ${error.detail}`);
+//     } else {
+//       alert("Cập nhật thành công!");
+//       await loadLessons(lesson.topic_id);
+//     }
+//   } catch (error) {
+//     console.error("Lỗi khi cập nhật:", error);
+//     alert("Có lỗi xảy ra!");
+//   }
+// };
 
 
 // Xóa bài học

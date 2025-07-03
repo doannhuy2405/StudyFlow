@@ -73,9 +73,14 @@
       <div class="timer-box">
         <h2>Đang học</h2>
         <h1>{{ timerStore.formattedElapsed }}</h1>
-        <button class="btn btn-danger mt-4" @click="stopTracking">Dừng</button>
+
+        <div class="d-flex justify-content-center gap-3 mt-4">
+          <button class="btn btn-danger" @click="stopTracking">Dừng</button>
+          <button class="btn btn-outline-light" @click="goToHome">Về trang chủ</button>
+        </div>
       </div>
     </div>
+
 
     <!-- Giao diện toàn màn hình cho Pomodoro -->
     <div v-if="timerStore.isPomodoro" class="fullscreen-overlay pomodoro">
