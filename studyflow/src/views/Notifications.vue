@@ -1,5 +1,5 @@
 <template>
-  <div class="home-page">
+  <div class="notification-page">
     
     <!-- Component mạng nơ-ron chồng lên -->
     <NeuralNetworkBg />
@@ -54,8 +54,19 @@
           </div>
         </div>
       </div>
+    </div>
 
+    <!-- Notifications List -->
+    <div class="notification-box">
+      <h2 class="title" style="color: white;">Thông báo học tập</h2>
 
+      <div v-if="notifications.length === 0" class="empty-msg">Không có thông báo nào.</div>
+      <ul v-else class="notification-list">
+        <li v-for="(note, index) in notifications" :key="index" class="notification-item">
+          <div class="time">{{ formatTime(note.timestamp) }}</div>
+          <div class="message">{{ note.message }}</div>
+        </li>
+      </ul>
     </div>
   </div>
 </template>
@@ -70,6 +81,7 @@ import defaultAvatar from '../assets/image/Logo_app.png';
 
 const router = useRouter();
 const user = ref(null);
+const notifications = ref([]);
 
 const dropdownOpen = ref(false)
 function toggleDropdown() {
@@ -106,11 +118,34 @@ const fetchUserProfile = async () => {
   }
 };
 
+
+const fetchNotifications = async () => {
+  const token = localStorage.getItem("token");
+  if (!token) return;
+
+  const res = await fetch("/api/notifications", {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
+  if (res.ok) {
+    notifications.value = await res.json();
+  } else {
+    notifications.value = [];
+  }
+};
+
+const formatTime = (isoString) => {
+  const date = new Date(isoString);
+  return date.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+};
+
+
 onMounted(async () => {
   const userData = await fetchUserProfile();
   if (userData) {
     user.value = userData;
   }
+  await fetchNotifications();
 });
 
 // Chuyển trang Thông tin tài khoản
@@ -142,7 +177,7 @@ const logout = () => {
 </script>
 
 <style scoped>
-.home-page {
+.notification-page {
   position: relative;
   height: 100vh;
   overflow: hidden;
@@ -240,4 +275,54 @@ const logout = () => {
   overflow: hidden;
 }
 
+.notification-box {
+  position: absolute;
+  top: 180px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  border-radius: 15px;
+  padding: 30px;
+  width: 600px;
+  max-height: 60vh;
+  overflow-y: auto;
+  z-index: 2;
+  text-align: center;
+}
+
+.title {
+  font-size: 1.8em;
+  margin-bottom: 20px;
+}
+
+.empty-msg {
+  font-size: 1.2em;
+  color: #ccc;
+}
+
+.notification-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.notification-item {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 10px;
+  text-align: left;
+}
+
+.time {
+  font-size: 0.9em;
+  color: #ccc;
+  margin-bottom: 5px;
+}
+
+.message {
+  font-size: 1.1em;
+  font-weight: bold;
+}
 </style>

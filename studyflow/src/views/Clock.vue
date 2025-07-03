@@ -1,5 +1,5 @@
 <template>
-  <div class="home-page">
+  <div class="clock-page">
     
     <!-- Component mạng nơ-ron chồng lên -->
     <NeuralNetworkBg />
@@ -57,59 +57,59 @@
     </div>
     
       <!-- Nút bắt đầu học -->
-      <div class="header">
-        <div class="timer-buttons">
-          <button class="btn btn-outline-warning" @click="startStudyMode">
-            <i class="fas fa-play-circle"></i> Bắt đầu học
-          </button>
-          <button class="btn btn-outline-success" @click="startPomodoroMode">
-            <i class="fas fa-stopwatch"></i> Pomodoro 50'
-          </button>
-        </div>
+    <div class="header">
+      <div class="timer-buttons">
+        <button class="btn btn-outline-warning" @click="startStudyMode">
+          <i class="fas fa-play-circle"></i> Bắt đầu học
+        </button>
+        <button class="btn btn-outline-success" @click="startPomodoroMode">
+          <i class="fas fa-stopwatch"></i> Pomodoro 50'
+        </button>
       </div>
+    </div>
 
-
-      <div v-if="isTracking" class="fullscreen-overlay">
-        <div class="timer-box">
-          <h2>Đang học</h2>
-          <h1>{{ formattedElapsed }}</h1>
-          <button class="btn btn-danger mt-4" @click="stopTracking">Dừng</button>
-        </div>
+    <!-- Giao diện toàn màn hình khi đang học -->
+    <div v-if="timerStore.isTracking" class="fullscreen-overlay">
+      <div class="timer-box">
+        <h2>Đang học</h2>
+        <h1>{{ timerStore.formattedElapsed }}</h1>
+        <button class="btn btn-danger mt-4" @click="stopTracking">Dừng</button>
       </div>
+    </div>
 
-      <!-- Giao diện toàn màn hình cho Pomodoro -->
-      <div v-if="isPomodoro" class="fullscreen-overlay pomodoro">
-        <div class="timer-box">
-          <h2>Pomodoro</h2>
-          <h1>{{ formattedCountdown }}</h1>
-          <button class="btn btn-warning mt-4" @click="stopPomodoro">Dừng Pomodoro</button>
-        </div>
+    <!-- Giao diện toàn màn hình cho Pomodoro -->
+    <div v-if="timerStore.isPomodoro" class="fullscreen-overlay pomodoro">
+      <div class="timer-box">
+        <h2>Pomodoro</h2>
+        <h1>{{ timerStore.formattedCountdown }}</h1>
+        <button class="btn btn-warning mt-4" @click="stopPomodoro">Dừng Pomodoro</button>
       </div>
+    </div>
 
-      <div class="history-container" v-if="filteredStudyHistory.length > 0">
-        <h2>Lịch sử học tập</h2>
-        <table class="table table-dark table-bordered mt-3">
-          <thead>
-            <tr>
-              <th>Ngày</th>
-              <th>Bắt đầu</th>
-              <th>Kết thúc</th>
-              <th>Thời lượng (phút)</th>
-              <th>Loại học</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(session, index) in filteredStudyHistory" :key="index">
-              <td>{{ formatDate(session.start) }}</td>
-              <td>{{ formatTime(session.start) }}</td>
-              <td>{{ formatTime(session.end) }}</td>
-              <td>{{ session.duration ? (Number(session.duration) / 60).toFixed(1) : '—' }}</td>
-              <td>{{ session.type === 'pomodoro' ? 'Pomodoro' : 'Đếm giờ' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>`
-
+    <!-- Lịch sử học tập -->
+    <div class="history-container" v-if="filteredStudyHistory.length > 0">
+      <h2>Lịch sử học tập</h2>
+      <table class="table table-dark table-bordered mt-3">
+        <thead>
+          <tr>
+            <th>Ngày</th>
+            <th>Bắt đầu</th>
+            <th>Kết thúc</th>
+            <th>Thời lượng (phút)</th>
+            <th>Loại học</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(session, index) in filteredStudyHistory" :key="index">
+            <td>{{ formatDate(session.start) }}</td>
+            <td>{{ formatTime(session.start) }}</td>
+            <td>{{ formatTime(session.end) }}</td>
+            <td>{{ session.duration ? (Number(session.duration) / 60).toFixed(1) : '—' }}</td>
+            <td>{{ session.type === 'pomodoro' ? 'Pomodoro' : 'Đếm giờ' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
 
@@ -117,15 +117,17 @@
 import NeuralNetworkBg from '@/components/NeuralNetworkBg.vue';
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { useTimerStore } from '@/stores/timerStore';
 
 // Import avatar mặc đinh hệ thống
 import defaultAvatar from '../assets/image/Logo_app.png';
 
 const router = useRouter();
 const user = ref(null);
-const isTracking = ref(false)
-const isPomodoro = ref(false)
+// const isTracking = ref(false)
+// const isPomodoro = ref(false)
 const studyHistory = ref([])
+const timerStore = useTimerStore()
 
 let timerInterval = null
 const elapsedSeconds = ref(0)
@@ -136,15 +138,61 @@ const filteredStudyHistory = computed(() => {
 });
 
 
-const formatDate = (isoString) => {
-  const date = new Date(isoString)
-  return date.toLocaleDateString('vi-VN')
+const startStudyMode = async () => {
+  const token = localStorage.getItem("token")
+  const res = await fetch("/api/timetracking/start", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`
+    }
+  })
+
+  if (res.ok) {
+    timerStore.startTracking()
+  } else {
+    alert("Không thể bắt đầu học.")
+  }
 }
 
-const formatTime = (isoString) => {
-  const date = new Date(isoString)
-  return date.toLocaleTimeString('vi-VN')
+const startPomodoroMode = async () => {
+  const token = localStorage.getItem("token")
+  const res = await fetch("/api/pomodoro/start", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`
+    }
+  })
+
+  if (res.ok) {
+    timerStore.startPomodoro()
+  } else {
+    alert("Không thể bắt đầu Pomodoro.")
+  }
 }
+
+
+// Hiển thị theo múi giờ Việt Nam (Asia/Ho_Chi_Minh)
+const formatDate = (isoString) => {
+  return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).format(new Date(isoString));
+};
+
+const formatTime = (isoString) => {
+  return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).format(new Date(isoString));
+};
+
 
 const dropdownOpen = ref(false)
 function toggleDropdown() {
@@ -197,93 +245,58 @@ const fetchUserProfile = async () => {
 };
 
 
-// Bắt đầu học
-const startStudyMode = async () => {
-  const token = localStorage.getItem("token")
-  const res = await fetch("/api/timetracking/start", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`
-    },
-    body: JSON.stringify({})
-  })
-
-  if (res.ok) {
-    isTracking.value = true
-    elapsedSeconds.value = 0
-
-    if (timerInterval) clearInterval(timerInterval)
-
-    timerInterval = setInterval(() => {
-      elapsedSeconds.value++
-    }, 1000)
-  } else {
-    alert("Không thể bắt đầu học.")
-  }
-}
-
-
 // Dừng học
 const stopTracking = async () => {
-  clearInterval(timerInterval)
-  isTracking.value = false
-
-  const token = localStorage.getItem("token") 
-
-  const res = await fetch("/api/timetracking/stop", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}` 
-    },
-    body: JSON.stringify({})
-  })
-
-  const data = await res.json()
-  if (res.ok) {
-    alert(`Đã lưu thời gian học: ${Math.floor(data.duration)} giây`)
-    await fetchStudyHistory()
-  } else {
-    alert("Lỗi khi lưu thời gian học.")
-  }
-}
-
-
-
-// Bắt đầu Pomodoro
-const startPomodoroMode = async () => {
   try {
     const token = localStorage.getItem("token");
-    const res = await fetch("/api/pomodoro/start", {
+    // Gọi API để dừng tracking trước
+    const res = await fetch("/api/timetracking/stop", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`
+        "Authorization": `Bearer ${token}`
       }
     });
-    if (!res.ok) throw new Error("Không thể bắt đầu Pomodoro");
 
-    isPomodoro.value = true;
-    countdownSeconds.value = 50 * 60;
-    timerInterval = setInterval(() => {
-      countdownSeconds.value--;
-      if (countdownSeconds.value <= 0) {
-        clearInterval(timerInterval);
-        isPomodoro.value = false;
-        alert("Pomodoro hoàn thành!");
-      }
-    }, 1000);
+    if (res.ok) {
+      // Sau khi API thành công mới dừng store
+      await timerStore.stopTracking();
+      
+      await fetchStudyHistory(); // Cập nhật lại lịch sử
+    } else {
+      const error = await res.json();
+      alert(`Lỗi khi dừng: ${error.message || 'Không thể dừng session'}`);
+    }
   } catch (err) {
-    alert("Lỗi Pomodoro");
-    console.error(err);
+    console.error("Lỗi khi dừng:", err);
+    alert("Có lỗi xảy ra khi dừng session");
   }
 };
 
-// Dừng Pomodoro thủ công
-const stopPomodoro = () => {
-  clearInterval(timerInterval);
-  isPomodoro.value = false;
+
+const stopPomodoro = async () => {
+  try {
+    const token = localStorage.getItem("token");
+    // Gọi API để dừng pomodoro
+    const res = await fetch("/api/pomodoro/stop", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`
+      }
+    });
+
+    if (res.ok) {
+      await timerStore.stopPomodoro();
+      await fetchStudyHistory(); // Cập nhật lại lịch sử
+    } else {
+      const error = await res.json();
+      alert(`Lỗi khi dừng Pomodoro: ${error.message || 'Lỗi không xác định'}`);
+    }
+  } catch (err) {
+    console.error("Lỗi khi dừng Pomodoro:", err);
+    alert("Có lỗi xảy ra khi dừng Pomodoro");
+  }
 };
+
 
 // Lịch sử học tập
 const fetchStudyHistory = async () => {
@@ -311,7 +324,6 @@ const fetchStudyHistory = async () => {
 };
 
 
-
 // Mounted
 onMounted(async () => {
   const userData = await fetchUserProfile();
@@ -320,15 +332,6 @@ onMounted(async () => {
     await fetchStudyHistory();
   }
 });
-
-
-onMounted(async () => {
-  const userData = await fetchUserProfile()
-  if (userData) {
-    user.value = userData
-    await fetchStudyHistory() 
-  }
-})
 
 // Chuyển trang Thông tin tài khoản
 const goToAccountInformation = () => {
@@ -364,10 +367,10 @@ const logout = () => {
 </script>
 
 <style scoped>
-.home-page {
+.clock-page {
   position: relative;
   height: 100vh;
-  overflow: hidden;
+  overflow-x: hidden;
   background-color: #000;
   text-align: center;
 }

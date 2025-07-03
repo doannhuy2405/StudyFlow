@@ -3,26 +3,34 @@ import os
 import bcrypt 
 import uvicorn
 import firebase_admin
-import json
+import uuid
+import asyncio
+import mimetypes
+import pytz
 from datetime import datetime, timedelta
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, HTTPException, Depends, Request, APIRouter, Header, Body
-from pymongo import MongoClient, ReturnDocument
+from fastapi import FastAPI, HTTPException, Depends, Request, APIRouter, UploadFile, File, APIRouter
+from pymongo import MongoClient, ReturnDocument, errors, DESCENDING
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from firebase_admin import auth, credentials
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from bson import ObjectId, json_util
 from models import UserLogin
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from motor.motor_asyncio import AsyncIOMotorClient # type: ignore
 from collections import defaultdict
-from typing import List, Optional
+from typing import List, Optional, Any
 from bson.errors import InvalidId
 from bson import ObjectId
 from starlette.middleware.base import BaseHTTPMiddleware
+from collections import defaultdict
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 
 #-----------------------------------------------------Database-----------------------------------------------
@@ -59,13 +67,18 @@ try:
     userstats_collection = db["userstats"]
     studysessions_collection = db["studysessions"]
     activitylogs_collection = db["activitylogs"]
-    collection = db["reports"]
+    notifications_collection = db["notifications"]
+    reminderlogs_collection = db["reminderlogs"]
     
     print("✅ Kết nối MongoDB thành công!")
 except Exception as e:
     raise ValueError(f"Lỗi kết nối MongoDB: {e}")
 
 #-------------------------------Authentication APIs-------------------------------------------------
+
+# Múi giờ Việt Nam
+scheduler = AsyncIOScheduler(timezone="Asia/Ho_Chi_Minh")
+VN_TZ = timezone(timedelta(hours=7))
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -314,7 +327,7 @@ async def google_login(request: Request):
                 "$setOnInsert": {
                     "created_at": datetime.utcnow(),
                     "roles": ["user"],
-                    "password": ""  # Trường password rỗng cho user Google
+                    "password": ""  #
                 }
             },
             upsert=True,
@@ -454,8 +467,8 @@ class LessonItem(BaseModel):
     name: str
     note: Optional[str] = ''
     due_date: Optional[str] = ''
-    status: str = "Chưa hoàn thành"
-
+    status: str = "not_done"
+    documents: List[dict] = []
 
 class TopicCreate(BaseModel):
     name: str
@@ -466,9 +479,8 @@ class LessonUpdate(BaseModel):
     name: Optional[str] = None
     note: Optional[str] = ""
     planned_date: Optional[str] = ""
-    status: Optional[str] = "chưa hoàn thành"
+    status: Optional[str] = "not_done"
     topic_id: Optional[str] = None
-
 
 class HabitSetup(BaseModel):
     user_id: str
@@ -491,8 +503,27 @@ class LessonCreate(BaseModel):
     name: str
     note: Optional[str] = ''
     due_date: Optional[str] = ''
-    status: str = "Chưa hoàn thành"
+    status: str = "not_done"
+    documents: List[dict] = []
 
+# Model cho tài liệu
+class DocumentInfo(BaseModel):
+    id: str
+    original_name: str
+    saved_name: str
+    file_path: str
+    content_type: str
+    size: int
+    uploaded_at: str
+
+# Model cập nhật bài học (bổ sung documents)
+class LessonUpdate(BaseModel):
+    name: Optional[str] = None
+    note: Optional[str] = None
+    due_date: Optional[str] = None
+    status: Optional[str] = None
+    documents: Optional[List[DocumentInfo]] = None
+    
 
 def convert_objectid(doc):
     doc["_id"] = str(doc["_id"])
@@ -605,20 +636,32 @@ async def get_lessons(topic_id: str, request: Request):
 
 # Thêm bài học vào chủ đề
 @app.post("/topics/{topic_id}/lessons")
-async def add_lesson(topic_id: str, lesson: LessonCreate, request: Request):
-    user_id = request.state.user_id  # 👈 Lấy user từ middleware
+async def create_lesson(topic_id: str, request: Request, lesson: LessonCreate):
+    user_id = request.state.user_id
     if not user_id:
-        raise HTTPException(status_code=401, detail="Chưa xác thực người dùng")
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    new_lesson = {
+        "user_id": ObjectId(user_id),
+        "topic_id": ObjectId(topic_id),
+        "name": lesson.name,
+        "note": lesson.note,
+        "due_date": lesson.due_date,
+        "status": lesson.status,
+        "documents": [],
+        "created_at": datetime.now(VN_TZ)
+    }
 
-    lesson_dict = lesson.model_dump()
-    lesson_dict["topic_id"] = ObjectId(topic_id)
-    lesson_dict["user_id"] = ObjectId(user_id) 
+    result = await lessons_collection.insert_one(new_lesson)
+    created_lesson = await lessons_collection.find_one({"_id": result.inserted_id})
 
-    if "status" not in lesson_dict or not lesson_dict["status"]:
-        lesson_dict["status"] = "chưa hoàn thành"
+    # 👉 Đây là phần quan trọng để frontend nhận được `_id`
+    created_lesson["_id"] = str(created_lesson["_id"])
+    created_lesson["topic_id"] = str(created_lesson["topic_id"])
+    created_lesson["user_id"] = str(created_lesson["user_id"])
 
-    result = await lessons_collection.insert_one(lesson_dict)
-    return {"id": str(result.inserted_id)}
+    return {"message": "Lesson created", "lesson": created_lesson}
+
 
 
 # Sửa bài học
@@ -654,29 +697,10 @@ async def delete_lesson(id: str):
     return {"msg": "Lesson deleted successfully"}
 
 
-# Thiết lập thói quen học tập
-@app.post("/habits")
-async def setup_habits(habit: HabitSetup):
-    await settings_collection.update_one(
-        {"user_id": habit.user_id},
-        {"$set": habit.dict()},
-        upsert=True
-    )
-    return {"msg": "Thiết lập thói quen thành công"}
-
-
-# Lấy dữ liệu thói quen học
-@app.get("/habits")
-async def get_habits(user_id: str):
-    habit = await settings_collection.find_one({"user_id": user_id})
-    if habit:
-        habit["_id"] = str(habit["_id"])
-    return habit or {"msg": "Không có dữ liệu"}
-
-
 # Bắt đầu đồng hồ đo thời gian thực tế
 @app.post("/timetracking/start")
 async def start_tracking(request: Request):
+    """Bắt đầu session học tập mới"""
     user_id = request.state.user_id
     if not user_id:
         raise HTTPException(status_code=401, detail="Chưa xác thực người dùng")
@@ -684,33 +708,47 @@ async def start_tracking(request: Request):
     try:
         obj_user_id = ObjectId(user_id)
     except errors.InvalidId:
-        raise HTTPException(status_code=400, detail="user_id không hợp lệ")
+        raise HTTPException(status_code=400, detail="ID người dùng không hợp lệ")
 
-    # Chỉ thêm session nếu không có session nào chưa kết thúc
+    # Kiểm tra session đang chạy
     existing_session = await studysessions_collection.find_one({
         "user_id": obj_user_id,
         "end": {"$exists": False}
     })
 
     if existing_session:
-        return {"msg": "Session đang chạy đã tồn tại"}
+        # Trả về thông tin session hiện tại thay vì thông báo lỗi
+        return {
+            "session_id": str(existing_session["_id"]),
+            "start": existing_session["start"],
+            "is_running": True
+        }
 
-    session = {
+    # Tạo session mới
+    session_data = {
         "user_id": obj_user_id,
-        "start": datetime.utcnow()
+        "start": datetime.now(VN_TZ),
+        "type": "study"  # Loại session
     }
-    await studysessions_collection.insert_one(session)
-    return {"msg": "Tracking started"}
+
+    result = await studysessions_collection.insert_one(session_data)
+    
+    return {
+        "session_id": str(result.inserted_id),
+        "start": session_data["start"],
+        "is_running": True
+    }
 
 
 # Dừng đồng hộ và lưu thời gian học
 @app.post("/timetracking/stop")
 async def stop_tracking(request: Request):
+    """Dừng session học tập hiện tại"""
     user_id = request.state.user_id
     if not user_id:
         raise HTTPException(status_code=401, detail="Chưa xác thực người dùng")
 
-    # ✅ Chỉ lấy session chưa kết thúc
+    # Tìm session chưa kết thúc gần nhất
     session = await studysessions_collection.find_one({
         "user_id": ObjectId(user_id),
         "end": {"$exists": False}
@@ -719,43 +757,91 @@ async def stop_tracking(request: Request):
     if not session:
         raise HTTPException(status_code=404, detail="Không có session nào đang chạy")
 
-    end_time = datetime.utcnow()
-    duration = (end_time - session["start"]).total_seconds()
+    end_time = datetime.now(VN_TZ)
+    start_time = session["start"].astimezone(VN_TZ) if session["start"].tzinfo else session["start"].replace(tzinfo=timezone.utc).astimezone(VN_TZ)
+    
+    duration = (end_time - start_time).total_seconds()
 
+    # Cập nhật session
     await studysessions_collection.update_one(
         {"_id": session["_id"]},
-        {"$set": {"end": end_time, "duration": duration}}
+        {"$set": {
+            "end": end_time,
+            "duration": duration,
+            "status": "completed"
+        }}
     )
 
-    return {"duration": duration}
-
+    return {
+        "session_id": str(session["_id"]),
+        "start": start_time,
+        "end": end_time,
+        "duration": duration,
+        "type": session.get("type", "study")
+    }
 
 
 # Bắt đầu đồng hồ đếm ngược
 @app.post("/pomodoro/start")
 async def start_pomodoro(request: Request):
+    """Bắt đầu session Pomodoro mới"""
     user_id = request.state.user_id
     if not user_id:
-        raise HTTPException(status_code=401, detail="Chưa xác thực")
+        raise HTTPException(status_code=401, detail="Chưa xác thực người dùng")
 
-    start_time = datetime.utcnow()
-    end_time = start_time + timedelta(minutes=2)
-    duration = 25 * 60  # giây
+    # Kiểm tra xem có session nào đang chạy không
+    existing_session = await studysessions_collection.find_one({
+        "user_id": ObjectId(user_id),
+        "end": {"$exists": False}
+    })
 
-    session = {
-        "user_id": user_id,
+    if existing_session:
+        raise HTTPException(
+            status_code=400,
+            detail="Đang có session học tập chưa kết thúc. Hãy kết thúc session hiện tại trước khi bắt đầu Pomodoro"
+        )
+
+    start_time = datetime.now(VN_TZ)
+    duration = 50 * 60  # 50 phút
+
+    session_data = {
+        "user_id": ObjectId(user_id),
         "start": start_time,
-        "end": end_time,
+        "type": "pomodoro",
+        "duration": duration,
+        "status": "running"
+    }
+
+    result = await studysessions_collection.insert_one(session_data)
+    
+    return {
+        "session_id": str(result.inserted_id),
+        "start": start_time,
         "duration": duration,
         "type": "pomodoro"
     }
 
-    await studysessions_collection.insert_one(session)
+
+# Kiểm tra session đang hoạt động
+@app.get("/timetracking/active")
+async def get_active_session(request: Request):
+    """Lấy session đang hoạt động"""
+    user_id = request.state.user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Chưa xác thực người dùng")
+
+    session = await studysessions_collection.find_one({
+        "user_id": ObjectId(user_id),
+        "end": {"$exists": False}
+    }, sort=[("start", -1)])
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Không có session nào đang chạy")
 
     return {
-        "msg": "Đã bắt đầu Pomodoro và lưu vào lịch sử",
-        "start": start_time,
-        "duration_minutes": 50
+        "session_id": str(session["_id"]),
+        "start": session["start"],
+        "type": session.get("type", "study")
     }
 
 
@@ -773,37 +859,486 @@ async def get_tracking_history(request: Request):
     for s in sessions:
         s["_id"] = str(s["_id"])
         s["user_id"] = str(s["user_id"])
+        
+        # Chuyển đổi múi giờ cho các trường thời gian
+        if "start" in s:
+            if s["start"].tzinfo is None:  # Nếu không có múi giờ
+                s["start"] = s["start"].replace(tzinfo=timezone.utc).astimezone(VN_TZ)
+            else:  # Nếu đã có múi giờ
+                s["start"] = s["start"].astimezone(VN_TZ)
+                
+        if "end" in s and s["end"] is not None:
+            if s["end"].tzinfo is None:
+                s["end"] = s["end"].replace(tzinfo=timezone.utc).astimezone(VN_TZ)
+            else:
+                s["end"] = s["end"].astimezone(VN_TZ)
+    
     return sessions
 
 
-# Tạo nhật ký học tập hàng ngày
-@app.post("/journals")
-async def create_journal(journal: JournalCreate):
-    journal_dict = journal.dict()
-    journal_dict["date"] = datetime.utcnow()
-    await dailylogs_collection.insert_one(journal_dict)
-    return {"msg": "Journal saved"}
+# Thống kê tổng quan
+@app.get("/statistics/user/summary")
+async def get_user_summary(request: Request):
+    user_id = request.state.user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Chưa xác thực người dùng")
+
+    try:
+        obj_user_id = ObjectId(user_id)
+    except:
+        raise HTTPException(status_code=400, detail="ID người dùng không hợp lệ")
+
+    # Pipeline tính thời gian học (giữ nguyên)
+    pipeline = [
+        {"$match": {
+            "user_id": obj_user_id,
+            "end": {"$exists": True},
+            "duration": {"$gt": 0}
+        }},
+        {"$group": {
+            "_id": None,
+            "total_seconds": {"$sum": "$duration"},
+            "sessions_count": {"$sum": 1},
+            "study_dates": {"$addToSet": {
+                "$dateToString": {
+                    "format": "%Y-%m-%d",
+                    "date": {"$toDate": "$start"},
+                    "timezone": "+07"
+                }
+            }}
+        }},
+        {"$project": {
+            "_id": 0,
+            "total_hours": {"$round": [{"$divide": ["$total_seconds", 3600]}, 2]},
+            "sessions_count": 1,
+            "study_dates": 1
+        }}
+    ]
+
+    # Pipeline tính số bài học đã hoàn thành (THÊM VÀO)
+    completed_lessons_pipeline = [
+        {"$match": {
+            "user_id": obj_user_id,
+            "status": "done"
+        }},
+        {"$count": "completed_lessons"}
+    ]
+
+    # Pipeline tính chủ đề hoàn thành (giữ nguyên)
+    topics_pipeline = [
+        {"$match": {"user_id": obj_user_id}},
+        {"$lookup": {
+            "from": "lessons",
+            "localField": "_id",
+            "foreignField": "topic_id",
+            "as": "lessons"
+        }},
+        {"$addFields": {
+            "total_lessons": {"$size": "$lessons"},
+            "completed_lessons": {
+                "$size": {
+                    "$filter": {
+                        "input": "$lessons",
+                        "as": "lesson",
+                        "cond": {"$eq": ["$$lesson.status", "done"]}
+                    }
+                }
+            }
+        }},
+        {"$match": {
+            "$expr": {
+                "$and": [
+                    {"$gt": ["$total_lessons", 0]},
+                    {"$eq": ["$total_lessons", "$completed_lessons"]}
+                ]
+            }
+        }},
+        {"$count": "completed_topics"}
+    ]
+
+    # Thực hiện các pipeline (sửa lại để thêm completed_lessons)
+    stats_result, completed_lessons, completed_topics = await asyncio.gather(
+        studysessions_collection.aggregate(pipeline).to_list(1),
+        lessons_collection.aggregate(completed_lessons_pipeline).to_list(1),
+        topics_collection.aggregate(topics_pipeline).to_list(1)
+    )
+
+    stats = stats_result[0] if stats_result else {
+        "total_hours": 0,
+        "sessions_count": 0,
+        "study_dates": []
+    }
+
+    # Tính streak
+    streak = 0
+    today = datetime.now(VN_TZ).date()
+    current_date = today
+    study_dates_set = {datetime.strptime(d, "%Y-%m-%d").date() for d in stats["study_dates"]}
+    
+    while current_date in study_dates_set:
+        streak += 1
+        current_date -= timedelta(days=1)
+
+    # Kết quả trả về 
+    return {
+        "total_hours": stats["total_hours"],
+        "completed_lessons": completed_lessons[0]["completed_lessons"] if completed_lessons else 0,
+        "completed_topics": completed_topics[0]["completed_topics"] if completed_topics else 0,
+        "streak": streak,
+        "study_days_count": len(stats["study_dates"])
+    }
 
 
-# Lấy danh sách nhật ký
-@app.get("/journals")
-async def get_journals(user_id: str):
-    return await dailylogs_collection.find({"user_id": user_id}).to_list(100)
+# Biểu đồ thống kê 
+@app.get("/statistics/user/graph")
+async def get_user_graph(request: Request, period: str = "7days"):
+    user_id = request.state.user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Chưa xác thực người dùng")
+
+    try:
+        obj_user_id = ObjectId(user_id)
+    except:
+        raise HTTPException(status_code=400, detail="ID người dùng không hợp lệ")
+
+    # Xác định khoảng thời gian
+    end_date = datetime.now(VN_TZ)
+    if period == "7days":
+        start_date = end_date - timedelta(days=7)
+    elif period == "30days":
+        start_date = end_date - timedelta(days=30)
+    else:  # Mặc định 7 ngày
+        start_date = end_date - timedelta(days=7)
+
+    # Pipeline aggregation hiệu quả hơn
+    pipeline = [
+        {"$match": {
+            "user_id": obj_user_id,
+            "end": {"$exists": True},
+            "start": {"$gte": start_date, "$lte": end_date}
+        }},
+        {"$group": {
+            "_id": {
+                "$dateToString": {
+                    "format": "%Y-%m-%d",
+                    "date": "$start",
+                    "timezone": "+07"
+                }
+            },
+            "total_minutes": {"$sum": {"$divide": ["$duration", 60]}},
+            "sessions_count": {"$sum": 1}  # Thêm số session mỗi ngày nếu cần
+        }},
+        {"$project": {
+            "date": "$_id",
+            "minutes": {"$round": ["$total_minutes", 1]},
+            "sessions": "$sessions_count",
+            "_id": 0
+        }},
+        {"$sort": {"date": 1}}
+    ]
+
+    daily_stats = await studysessions_collection.aggregate(pipeline).to_list(None)
+
+    # Điền đầy đủ các ngày kể cả không có dữ liệu
+    date_range = [
+        (start_date + timedelta(days=x)).date().isoformat() 
+        for x in range((end_date.date() - start_date.date()).days + 1)
+    ]
+
+    # Tạo dict để truy xuất nhanh
+    stats_dict = {stat["date"]: stat for stat in daily_stats}
+
+    return [
+        {
+            "date": date,
+            "minutes": stats_dict.get(date, {}).get("minutes", 0),
+            "sessions": stats_dict.get(date, {}).get("sessions", 0)  # Thêm nếu cần
+        }
+        for date in date_range
+    ]
 
 
-# Gửi đánh giá học tập hàng ngày
-@app.post("/evaluations")
-async def create_evaluation(evaluation: EvaluationCreate):
-    evaluation_dict = evaluation.dict()
-    evaluation_dict["date"] = datetime.utcnow()
-    await activitylogs_collection.insert_one(evaluation_dict)
-    return {"msg": "Evaluation saved"}
+# Lấy danh sách bài học theo ngày
+@app.get("/lessons/scheduled")
+async def get_scheduled_lessons(request: Request):
+    # Middleware sẽ tự động kiểm tra token
+    user_id = request.state.user_id  
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    lessons = await lessons_collection.find({
+        "user_id": ObjectId(user_id),
+        "due_date": {"$exists": True, "$ne": ""}
+    }).to_list(1000)
+    
+    return [convert_objectid(lesson) for lesson in lessons]
 
 
-# Xem đánh giá học tập 
-@app.get("/evaluations")
-async def get_evaluations(user_id: str):
-    return await activitylogs_collection.find({"user_id": user_id}).to_list(100)
+ # Lấy danh sách bài học có ngày học dự kiến
+@app.get("/lessons")
+async def get_all_lessons(request: Request):
+    user_id = request.state.user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Chưa xác thực người dùng")
+
+    lessons = await lessons_collection.find({
+        "user_id": ObjectId(user_id),
+        "due_date": {"$ne": ""}  # Chỉ lấy bài có due_date
+    }).to_list(1000)
+
+    return [serialize_lesson(lesson) for lesson in lessons]
+
+
+# Cấu hình thư mục upload
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
+
+@app.post("/topics/{topic_id}/lessons/{lesson_id}/upload")
+async def upload_document_to_lesson(
+    topic_id: str,
+    lesson_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+):
+    """Upload tài liệu vào bài học cụ thể"""
+    user_id = request.state.user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # Kiểm tra bài học tồn tại và thuộc về user
+    lesson = await lessons_collection.find_one({
+        "_id": ObjectId(lesson_id),
+        "topic_id": ObjectId(topic_id),
+        "user_id": ObjectId(user_id)
+    })
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    # Tạo thư mục theo cấu trúc: uploads/topics/{topic_id}/lessons/{lesson_id}
+    topic_dir = os.path.join(UPLOAD_DIR, f"topics_{topic_id}")
+    lesson_dir = os.path.join(topic_dir, f"lessons_{lesson_id}")
+    os.makedirs(lesson_dir, exist_ok=True)
+
+    # Tạo tên file duy nhất nhưng giữ nguyên đuôi file
+    file_ext = Path(file.filename).suffix.lower()
+    unique_filename = f"{uuid.uuid4().hex}{file_ext}"
+    file_path = os.path.join(lesson_dir, unique_filename)
+
+    # Lưu file vật lý
+    try:
+        file_size = 0
+        with open(file_path, "wb") as buffer:
+            while chunk := await file.read(1024 * 1024):  # Đọc từng chunk 1MB
+                file_size += len(chunk)
+                buffer.write(chunk)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error saving file: {str(e)}")
+
+    # Tạo document info
+    document_info = DocumentInfo(
+        id=str(uuid.uuid4()),
+        original_name=file.filename,
+        saved_name=unique_filename,
+        file_path=f"/uploads/topics_{topic_id}/lessons_{lesson_id}/{unique_filename}",
+        content_type=file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream",
+        size=file_size,
+        uploaded_at=datetime.now().isoformat()
+    )
+
+    # Cập nhật vào bài học
+    update_result = await lessons_collection.update_one(
+        {"_id": ObjectId(lesson_id)},
+        {"$push": {"documents": document_info.dict()}}
+    )
+
+    if update_result.modified_count == 0:
+        os.remove(file_path)  # Rollback nếu không cập nhật được
+        raise HTTPException(status_code=500, detail="Failed to update lesson")
+
+    return JSONResponse(
+        status_code=201,
+        content={
+            "message": "File uploaded successfully",
+            "document": document_info.dict(),
+            "preview_url": f"/topics/{topic_id}/lessons/{lesson_id}/documents/{document_info.id}/preview"
+        }
+    )
+
+@app.get("/topics/{topic_id}/lessons/{lesson_id}/documents")
+async def list_lesson_documents(
+    topic_id: str,
+    lesson_id: str,
+    request: Request
+):
+    """Lấy danh sách tài liệu của bài học"""
+    user_id = request.state.user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    lesson = await lessons_collection.find_one(
+        {
+            "_id": ObjectId(lesson_id),
+            "topic_id": ObjectId(topic_id),
+            "user_id": ObjectId(user_id)
+        },
+        {"documents": 1}
+    )
+
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    return lesson.get("documents", [])
+
+@app.get("/topics/{topic_id}/lessons/{lesson_id}/documents/{document_id}")
+async def get_document_info(
+    topic_id: str,
+    lesson_id: str,
+    document_id: str,
+    request: Request
+):
+    """Lấy thông tin chi tiết của một tài liệu"""
+    user_id = request.state.user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    lesson = await lessons_collection.find_one(
+        {
+            "_id": ObjectId(lesson_id),
+            "topic_id": ObjectId(topic_id),
+            "user_id": ObjectId(user_id),
+            "documents.id": document_id
+        },
+        {"documents.$": 1}
+    )
+
+    if not lesson or not lesson.get("documents"):
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    return lesson["documents"][0]
+
+
+# Xem tài liệu
+@app.get("/topics/{topic_id}/lessons/{lesson_id}/documents/{document_id}/preview")
+async def preview_document(topic_id: str, lesson_id: str, document_id: str):
+    topic_path = f"uploads/topics_{topic_id}/lessons_{lesson_id}"
+    
+    lesson = await lessons_collection.find_one({"_id": ObjectId(lesson_id)})
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    matched_doc = next((doc for doc in lesson.get("documents", []) if doc["id"] == document_id), None)
+    if not matched_doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    file_path = os.path.join(topic_path, matched_doc["saved_name"])
+
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File does not exist")
+
+    # --- Xác định MIME type từ phần mở rộng ---
+    ext = os.path.splitext(matched_doc["saved_name"])[1].lower()
+    if ext == ".pdf":
+        media_type = "application/pdf"
+    elif ext in [".jpg", ".jpeg"]:
+        media_type = "image/jpeg"
+    elif ext == ".png":
+        media_type = "image/png"
+    elif ext == ".gif":
+        media_type = "image/gif"
+    else:
+        media_type = "application/octet-stream"  # fallback
+    
+    return FileResponse(
+        path=file_path,
+        media_type=media_type,
+        filename=matched_doc["original_name"],
+        headers={"Content-Disposition": f'inline; filename="{matched_doc["original_name"]}"'}
+    )
+
+# Xóa tài liệu
+@app.delete("/topics/{topic_id}/lessons/{lesson_id}/documents/{document_id}")
+async def delete_document(
+    topic_id: str,
+    lesson_id: str,
+    document_id: str,
+    request: Request
+):
+    """Xóa tài liệu khỏi bài học"""
+    user_id = request.state.user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # Lấy thông tin document trước khi xóa
+    document = await get_document_info(topic_id, lesson_id, document_id, request)
+    
+    # Xóa document khỏi database
+    update_result = await lessons_collection.update_one(
+        {
+            "_id": ObjectId(lesson_id),
+            "topic_id": ObjectId(topic_id),
+            "user_id": ObjectId(user_id)
+        },
+        {"$pull": {"documents": {"id": document_id}}}
+    )
+
+    if update_result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Document not found in lesson")
+
+    # Xóa file vật lý
+    file_path = os.path.join(
+        UPLOAD_DIR,
+        f"topics_{topic_id}",
+        f"lessons_{lesson_id}",
+        document["saved_name"]
+    )
+    
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+    except Exception as e:
+        print(f"Error deleting file: {str(e)}")
+
+    return {"message": "Document deleted successfully"}
+
+
+# Lấy ID người dùng
+async def get_current_user(request: Request):
+    user_id = request.state.user_id
+    user = await users_collection.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return user
+
+
+# Thông báo học tập
+@app.get("/notifications")
+async def get_user_notifications(current_user: dict = Depends(get_current_user)):
+    try:
+        user_id = str(current_user["_id"])
+        notifications = await notifications_collection.find(
+            {"user_id": user_id}
+        ).sort("timestamp", DESCENDING).to_list(20)
+
+        result = []
+        for n in notifications:
+            try:
+                timestamp_str = n["timestamp"].isoformat()
+            except Exception as e:
+                print("❌ Lỗi timestamp:", n["timestamp"], "|", str(e))
+                timestamp_str = str(n["timestamp"])  # fallback nếu lỗi
+
+            result.append({
+                "message": n.get("message", "Không có nội dung"),
+                "timestamp": timestamp_str
+            })
+
+        return result
+    except Exception as e:
+        print("🔥 Lỗi route /notifications:", str(e))
+        raise HTTPException(status_code=500, detail="Lỗi server khi lấy thông báo")
+
 
 
 #-------------------------------User APIs------------------------------------------------------
@@ -904,7 +1439,7 @@ async def unlock_user(id: str, token: str = Depends(oauth2_scheme)):
 
 
 # Tổng số người dùng
-@router.get("/admin/statistics/users")
+@app.get("/admin/statistics/users")
 async def total_users():
     cursor = users_collection.find({})
     users = await cursor.to_list(length=None)
@@ -915,66 +1450,118 @@ async def total_users():
 
 
 # Tổng số giờ học 
-@router.get("/admin/statistics/hours")
-async def total_hours():
-    cursor = studysessions_collection.find({"duration": {"$exists": True}})
-    total_minutes = sum([doc["duration"] async for doc in cursor])  # duration = phút
-    total_hours = total_minutes // 60
-    remaining_minutes = total_minutes % 60
-    return {
-        "total_hours": total_hours,
-        "total_minutes": remaining_minutes
-    }
+@app.get("/admin/statistics/hours")
+async def get_total_hours():
+    pipeline = [
+        {"$match": {
+            "end": {"$exists": True},
+            "duration": {"$gt": 0}
+        }},
+        {"$group": {
+            "_id": None,
+            "total_seconds": {"$sum": "$duration"}
+        }},
+        {"$project": {
+            "_id": 0,
+            "total_hours": {"$round": [{"$divide": ["$total_seconds", 3600]}, 2]}
+        }}
+    ]
+    result = await studysessions_collection.aggregate(pipeline).to_list(1)
+    return result[0] if result else {"total_hours": 0}
 
 
 # Tổng số bài học hoàn thành
-@router.get("/admin/statistics/lessons")
-async def total_completed_lessons():
-    count = await lessons_collection.count_documents({"status": "completed"})
-    return {"total_lessons": count}
+@app.get("/admin/statistics/lessons")
+async def get_total_completed_lessons():
+    count = await lessons_collection.count_documents({
+        "status": {
+            "$regex": "^\\s*done\\s*$",
+            "$options": "i"
+        }
+    })
+    return {"total_completed_lessons": count}
 
 
 # Mức độ hoạt động trung bình theo ngày / tuần
-@router.get("/admin/statistics/active-level")
-async def active_level():
-    # Lấy các phiên học có timestamp
-    cursor = studysessions_collection.find({"timestamp": {"$exists": True}})
-    activity_by_date = defaultdict(int)
+@app.get("/admin/statistics/active-level")
+async def get_active_level():
+    now = datetime.now(VN_TZ)
+    start_of_week = now - timedelta(days=now.weekday())  # Thứ 2 đầu tuần
+    start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    async for doc in cursor:
-        ts = doc.get("timestamp")
-        if ts:
-            # Chuyển timestamp sang dạng ngày (yyyy-mm-dd)
-            date = ts.date() if isinstance(ts, datetime) else datetime.fromisoformat(ts).date()
-            activity_by_date[date] += 1
+    daily_hours = await studysessions_collection.aggregate([
+        {"$match": {"start": {"$gte": start_of_day}}},
+        {"$project": {"duration": {"$divide": [{"$subtract": ["$end", "$start"]}, 1000 * 60 * 60]}}},
+        {"$group": {"_id": None, "total": {"$sum": "$duration"}}}
+    ]).to_list(1)
 
-    total_days = len(activity_by_date)
-    total_sessions = sum(activity_by_date.values())
+    weekly_hours = await studysessions_collection.aggregate([
+        {"$match": {"start": {"$gte": start_of_week}}},
+        {"$project": {"duration": {"$divide": [{"$subtract": ["$end", "$start"]}, 1000 * 60 * 60]}}},
+        {"$group": {"_id": None, "total": {"$sum": "$duration"}}}
+    ]).to_list(1)
 
-    # Trung bình theo ngày & tuần
-    daily_avg = round(total_sessions / total_days, 2) if total_days else 0
-    weekly_avg = round(daily_avg * 7, 2)
+    daily_avg = round(daily_hours[0]["total"], 2) if daily_hours else 0
+    weekly_avg = round(weekly_hours[0]["total"], 2) if weekly_hours else 0
 
     return {
-        "avg_per_day": daily_avg,
-        "avg_per_week": weekly_avg
+        "daily_avg": daily_avg,
+        "weekly_avg": weekly_avg
     }
-    
-
-app.include_router(router)
 
 
-# Đặt giờ nhắc mặc định cho hệ thống
-@app.post("/admin/reminder/default")
-async def set_default_reminder(reminder: ReminderSetting):
-    await reminders_collection.update_one({"type": "default"}, {"$set": {"time": reminder.time}}, upsert=True)
-    return {"msg": "Reminder set"}
+# Hàm gửi thông báo giả lập
+async def notify_user(user, message):
+    print(f"Gửi đến {user['fullname']}: {message}")
 
-# Lấy cấu hình nhắc mặc định hiện tại
-@app.get("/admin/reminder/default")
-async def get_default_reminder():
-    reminder = await reminders_collection.find_one({"type": "default"})
-    return reminder or {"msg": "No default reminder"}
+
+# Job gửi nhắc học mỗi phút
+@app.on_event("startup")
+async def start_scheduler():
+    @scheduler.scheduled_job(CronTrigger(minute="*", timezone="Asia/Ho_Chi_Minh"))
+    async def send_daily_reminders():
+        now = datetime.now(pytz.timezone("Asia/Ho_Chi_Minh"))
+        today_str = now.strftime("%Y-%m-%d")
+
+        # Check MongoDB xem đã gửi hôm nay chưa
+        sent_log = await db["reminder_logs"].find_one({"date": today_str})
+        if sent_log:
+            print("🔁 Đã gửi nhắc học hôm nay rồi.")
+            return
+
+        # Lấy giờ nhắc từ DB
+        reminder = await reminders_collection.find_one({"type": "default"})
+        if not reminder:
+            print("⚠️ Không có cấu hình giờ nhắc.")
+            return
+
+        reminder_time = reminder.get("time")  # VD: "07:00"
+        if not reminder_time:
+            return
+
+        current_time_str = now.strftime("%H:%M")
+        if current_time_str != reminder_time:
+            return  # ⏳ Chưa đúng giờ
+
+        # Gửi thông báo cho tất cả user
+        users = await users_collection.find().to_list(None)
+        for user in users:
+            await notify_user(user, "⏰ Đã đến giờ học rồi!")
+
+            # Ghi vào collection notifications
+            await notifications_collection.insert_one({
+                "user_id": str(user["_id"]),
+                "message": "⏰ Đã đến giờ học rồi!",
+                "timestamp": datetime.utcnow()
+            })
+
+        # Đánh dấu là đã gửi hôm nay
+        await db["reminder_logs"].insert_one({"date": today_str})
+        print(f"✅ Nhắc học đã gửi lúc {current_time_str}")
+
+    scheduler.start()
+
 
 #-------------------------------Admin APIs------------------------------------------------------
 

@@ -89,10 +89,23 @@
           </div>
 
           <ul class="list-group">
-            <li v-for="lesson in lessonsMap[topic._id]" :key="lesson._id" class="lesson-card">
+            <li v-for="lesson in lessonsMap[topic.id]" :key="lesson.id" class="lesson-card">
               <div>
                 <strong>{{ lesson.name }}</strong>
                 <p>{{ lesson.note }}</p>
+                <!-- Hiển thị tài liệu nếu có -->
+                <div v-if="lesson.documents?.length">
+                  <small class="text-info">Tài liệu:</small>
+                  <ul>
+                    <li v-for="doc in lesson.documents" :key="doc.id">
+                      <a :href="`/api/topics/${topic.id}/lessons/${lesson.id}/documents/${doc.id}/preview`"
+                        target="_blank" class="text-warning">
+                        {{ doc.original_name }}
+                      </a>
+                      <button class="btn btn-sm btn-outline-danger ms-2" @click="deleteDocument(topic.id, lesson.id, doc.id)">Xóa</button>
+                    </li>
+                  </ul>
+                </div>
                 <span class="badge" :class="lesson.status === 'done' ? 'bg-success' : 'bg-warning text-dark'">
                   {{ lesson.status === 'done' ? 'Đã hoàn thành' : 'Chưa hoàn thành' }}
                 </span>
@@ -113,6 +126,17 @@
             </li>
           </ul>
 
+    
+          <div v-if="selectedDocumentUrl" class="mt-3">
+            <iframe
+              :src="selectedDocumentUrl"
+              width="100%"
+              height="600px"
+              style="border: 1px solid #ccc;"
+            ></iframe>
+          </div>
+
+
           <!-- Form thêm bài học -->
           <div v-if="showAddLessonForm === topic._id" class="bg-secondary p-3 rounded mt-3">
             <div class="mb-2">
@@ -127,6 +151,10 @@
               <label class="form-label text-white">Ngày học dự kiến:</label>
               <input v-model="newLesson.due_date" type="date" class="form-control" />
             </div>
+            <div class="mb-3">
+              <label class="form-label text-white">Tài liệu đính kèm (PDF, hình ảnh...):</label>
+              <input type="file" class="form-control" @change="handleFileUpload" />
+            </div>
             <div class="d-flex gap-2">
               <button class="btn btn-success btn-sm" @click="submitNewLesson(topic._id)">Lưu</button>
               <button class="btn btn-secondary btn-sm" @click="cancelAddLesson">Hủy</button>
@@ -137,8 +165,6 @@
         </div>
       </div>
     </div>
-
-    
   </div>
 </template>
 
@@ -158,6 +184,7 @@ const lessonsMap = ref({})
 const activeTopic = ref(null)
 const loadingTopics = ref(false)
 const loadingLessons = ref({})
+const selectedDocumentUrl = ref(null)
 
 const showAddLessonForm = ref(null)
 const newLesson = ref({
@@ -202,8 +229,30 @@ const submitNewLesson = async (topicId) => {
 
     if (!res.ok) throw new Error("Lỗi khi thêm bài học!");
 
+    const data = await res.json();
+
+    // ⬇️ Nếu có file, thực hiện upload vào bài học vừa tạo
+    if (selectedFile.value) {
+      const formData = new FormData();
+      formData.append("file", selectedFile.value);
+
+      const uploadRes = await fetch(`/api/topics/${topicId}/lessons/${data.lesson._id}/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem("token")}`
+        },
+        body: formData
+      });
+
+      if (!uploadRes.ok) {
+        alert("Thêm bài học thành công nhưng upload tài liệu thất bại.");
+      }
+    }
+
+    // ✅ Thành công
     await loadLessons(topicId);
     showAddLessonForm.value = null;
+    selectedFile.value = null;
     alert("Đã thêm bài học thành công!");
 
   } catch (err) {
@@ -406,26 +455,22 @@ const loadLessons = async (topicId) => {
 const editLesson = async (lesson) => {
   const newName = prompt("Tên mới:", lesson.name);
   const newNote = prompt("Ghi chú mới:", lesson.note);
-  const newDate = prompt("Ngày học dự kiến mới (YYYY-MM-DD):", lesson.due_date);  
+  const newDate = prompt("Ngày học dự kiến mới (YYYY-MM-DD):", lesson.due_date);
 
-  // Tạo object chỉ chứa field thay đổi
-  const updateData = {};
-
-  if (newName !== null && newName !== lesson.name) {
-    updateData.name = newName.trim();
-  }
-  if (newNote !== null && newNote !== lesson.note) {
-    updateData.note = newNote.trim();
-  }
-  if (newDate !== null && newDate !== lesson.due_date) {
-    updateData.due_date = newDate.trim();
-  }
-
-  // Nếu không có gì thay đổi thì bỏ qua
-  if (Object.keys(updateData).length === 0) {
-    alert("Không có thay đổi nào để cập nhật.");
+  // Validate date format
+  if (newDate && !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+    alert("Sai định dạng ngày (YYYY-MM-DD)");
     return;
   }
+
+  const updateData = {};
+  if (newName !== null && newName !== lesson.name) updateData.name = newName;
+  if (newNote !== null && newNote !== lesson.note) updateData.note = newNote;
+  if (newDate !== null && newDate !== lesson.due_date) {
+    updateData.due_date = newDate + "T00:00:00.000Z"; // Thêm timezone nếu cần
+  }
+
+  if (Object.keys(updateData).length === 0) return;
 
   try {
     const response = await fetch(`/api/lessons/${lesson.id}`, {
@@ -435,17 +480,18 @@ const editLesson = async (lesson) => {
     });
 
     if (!response.ok) {
-      const data = await response.json();
-      alert(`Lỗi cập nhật: ${data.detail}`);
+      const error = await response.json();
+      alert(`Lỗi: ${error.detail}`);
     } else {
-      alert("Đã cập nhật bài học.");
+      alert("Cập nhật thành công!");
       await loadLessons(lesson.topic_id);
     }
   } catch (error) {
-    console.error("Lỗi khi cập nhật bài học:", error);
-    alert("Có lỗi xảy ra khi gửi yêu cầu.");
+    console.error("Lỗi khi cập nhật:", error);
+    alert("Có lỗi xảy ra!");
   }
 };
+
 
 // Xóa bài học
 const deleteLesson = async (id, topicId) => {
@@ -521,6 +567,30 @@ const changeStatus = async (lesson, newStatus) => {
     alert("Có lỗi xảy ra khi cập nhật trạng thái.");
   }
 };
+
+
+const selectedFile = ref(null)
+
+function handleFileUpload(event) {
+  selectedFile.value = event.target.files[0]
+}
+
+async function deleteDocument(topicId, lessonId, documentId) {
+  if (!confirm("Bạn có chắc muốn xóa tài liệu này không?")) return
+  const res = await fetch(`/api/topics/${topicId}/lessons/${lessonId}/documents/${documentId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`
+    }
+  })
+  if (res.ok) {
+    alert("Đã xóa tài liệu")
+    await loadLessons(topicId)
+  } else {
+    alert("Xóa thất bại")
+  }
+}
+
 
 
 onMounted(async () => {

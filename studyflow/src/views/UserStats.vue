@@ -54,22 +54,64 @@
           </div>
         </div>
       </div>
+    </div>
 
+    <div class="statistics-container mt-5 px-5" style="color: white;">
+      <h2>Thống kê học tập</h2>
 
+      <div class="row mt-4">
+        <div class="col-md-3">
+          <div class="card bg-dark text-white p-3">
+            <h5>Tổng giờ học</h5>
+            <p class="fs-4">{{ summary?.total_hours ?? '—' }} giờ</p>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card bg-dark text-white p-3">
+            <h5>Số bài học đã hoàn thành</h5>
+            <p class="fs-4">{{ summary?.completed_lessons ?? '—' }}</p>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card bg-dark text-white p-3">
+            <h5>Chủ đề đã hoàn thành</h5>
+            <p class="fs-4">{{ summary?.completed_topics ?? '—' }}</p>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card bg-dark text-white p-3">
+            <h5>Chuỗi streak</h5>
+            <p class="fs-4">{{ summary?.streak ?? '—' }} ngày</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-4 bg-dark p-4">
+        <h5 class="text-white">Biểu đồ thời gian học</h5>
+        <Line :data="chartData" :options="{ responsive: true, plugins: { legend: { display: true } } }" />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
 import NeuralNetworkBg from '@/components/NeuralNetworkBg.vue';
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { Line } from 'vue-chartjs';
+import {
+  Chart as ChartJS, Title, Tooltip, Legend, LineElement, CategoryScale, LinearScale, PointElement
+} from 'chart.js';
 
 // Import avatar mặc đinh hệ thống
 import defaultAvatar from '../assets/image/Logo_app.png';
 
-const router = useRouter();
+ChartJS.register(Title, Tooltip, Legend, LineElement, CategoryScale, LinearScale, PointElement);
+
 const user = ref(null);
+const summary = ref(null);
+const graphData = ref([]);
+const router = useRouter();
 
 const dropdownOpen = ref(false)
 function toggleDropdown() {
@@ -106,12 +148,44 @@ const fetchUserProfile = async () => {
   }
 };
 
+
+const fetchStatisticsSummary = async () => {
+  const token = localStorage.getItem("token");
+  const res = await fetch("/api/statistics/user/summary", {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  summary.value = await res.json();
+};
+
+const fetchStatisticsGraph = async () => {
+  const token = localStorage.getItem("token");
+  const res = await fetch("/api/statistics/user/graph", {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  graphData.value = await res.json();
+};
+
+const chartData = computed(() => ({
+  labels: graphData.value.map(item => item.date),
+  datasets: [{
+    label: 'Phút học mỗi ngày',
+    data: graphData.value.map(item => item.minutes),
+    borderColor: 'rgba(75, 192, 192, 1)',
+    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+    tension: 0.3
+  }]
+}));
+
+
 onMounted(async () => {
   const userData = await fetchUserProfile();
   if (userData) {
     user.value = userData;
+    await fetchStatisticsSummary();
+    await fetchStatisticsGraph();
   }
 });
+
 
 //Chuyển trang Thông báo
 const goToNotifications = () => {
@@ -145,7 +219,7 @@ const logout = () => {
 .home-page {
   position: relative;
   height: 100vh;
-  overflow: hidden;
+  overflow-x: hidden;
   background-color: #000;
 }
 

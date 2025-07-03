@@ -132,9 +132,6 @@ onMounted(async () => {
       return;
     }
     user.value = adminData;
-    // Gọi API sau khi xác thực thành công
-    await fetchStatistics();
-    // Lấy giờ nhắc
     try {
       const res = await fetch('/api/admin/reminder/default', {
         headers: {

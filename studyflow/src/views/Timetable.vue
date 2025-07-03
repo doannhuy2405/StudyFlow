@@ -54,15 +54,76 @@
           </div>
         </div>
       </div>
+    </div>
 
-
+    <div class="schedule-container">
+      <h2 class="schedule-title">Thời khóa biểu học tập</h2>
+      
+      <!-- Lọc theo tuần/tháng -->
+      <div class="schedule-filter">
+        <button 
+          @click="setTimeRange('week')" 
+          :class="{ active: timeRange === 'week' }"
+        >
+          Tuần này
+        </button>
+        <button 
+          @click="setTimeRange('month')" 
+          :class="{ active: timeRange === 'month' }"
+        >
+          Tháng này
+        </button>
+      </div>
+      
+      <!-- Hiển thị thời khóa biểu -->
+      <div class="schedule-grid">
+        <div 
+          v-for="day in days" 
+          :key="day.date" 
+          class="schedule-day"
+          :class="{ 'today': day.isToday }"
+        >
+          <div class="day-header">
+            <div class="day-name">{{ day.dayName }}</div>
+            <div class="day-date">{{ formatDate(day.dateObj) }}</div>
+          </div>
+          
+          <div class="lessons-list">
+            <div 
+              v-for="lesson in day.lessons" 
+              :key="lesson._id" 
+              class="lesson-item"
+              :class="{
+                'done': lesson.status === 'done',
+                'not-done': lesson.status === 'not_done',
+                'in-progress': lesson.status === 'in_progress'
+              }"
+            >
+              <div class="lesson-time">{{ formatTime(lesson.due_date) }}</div>
+              <div class="lesson-info">
+                <h4 class="lesson-title">{{ lesson.name }}</h4>
+                <p class="lesson-topic">{{ getTopicName(lesson.topic_id) }}</p>
+                <p class="lesson-note" v-if="lesson.note">{{ lesson.note }}</p>
+              </div>
+              <div class="lesson-status">
+                <span v-if="lesson.status === 'done'">✓</span>
+                <span v-else-if="lesson.status === 'in_progress'">⌛</span>
+              </div>
+            </div>
+            
+            <div v-if="day.lessons.length === 0" class="no-lessons">
+              Không có bài học nào
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
 import NeuralNetworkBg from '@/components/NeuralNetworkBg.vue';
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 
 // Import avatar mặc đinh hệ thống
@@ -70,6 +131,14 @@ import defaultAvatar from '../assets/image/Logo_app.png';
 
 const router = useRouter();
 const user = ref(null);
+const lessons = ref([]);
+const topics = ref([]);
+const timeRange = ref('week');
+
+const formatDate = (date) => {
+  return date.toLocaleDateString('vi-VN'); 
+};
+
 
 const dropdownOpen = ref(false)
 function toggleDropdown() {
@@ -106,12 +175,118 @@ const fetchUserProfile = async () => {
   }
 };
 
+
+// Lấy danh sách bài học có due_date
+const fetchLessons = async () => {
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) throw new Error("Token không tồn tại");
+
+    const response = await fetch("/api/lessons", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) throw new Error(`Lỗi HTTP: ${response.status}`);
+    
+    const data = await response.json();
+    return data.filter(lesson => lesson.due_date); // Chỉ lấy bài học có due_date
+  } catch (error) {
+    console.error("Lỗi khi lấy danh sách bài học:", error);
+    return [];
+  }
+};
+
+// Lấy danh sách chủ đề
+const fetchTopics = async () => {
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) throw new Error("Token không tồn tại");
+
+    const response = await fetch("/api/topics", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) throw new Error(`Lỗi HTTP: ${response.status}`);
+    
+    return await response.json();
+  } catch (error) {
+    console.error("Lỗi khi lấy danh sách chủ đề:", error);
+    return [];
+  }
+};
+
+// Hàm chuyển đổi thời gian
+const formatTime = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+};
+
+// Hàm lấy tên chủ đề từ topic_id
+const getTopicName = (topicId) => {
+  const topic = topics.value.find(t => t._id === topicId);
+  return topic ? topic.name : 'Không có chủ đề';
+};
+
+// Thiết lập phạm vi thời gian
+const setTimeRange = (range) => {
+  timeRange.value = range;
+};
+
+// Tính toán các ngày trong tuần/tháng hiện tại
+const days = computed(() => {
+  const now = new Date();
+  const startDate = new Date(now);
+  const endDate = new Date(now);
+  
+  if (timeRange.value === 'week') {
+    // Bắt đầu từ thứ 2
+    startDate.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1));
+    endDate.setDate(startDate.getDate() + 6);
+  } else {
+    // Tháng này
+    startDate.setDate(1);
+    endDate.setMonth(startDate.getMonth() + 1);
+    endDate.setDate(0);
+  }
+  
+  const daysArray = [];
+  const currentDate = new Date(startDate);
+  
+  while (currentDate <= endDate) {
+    const dateStr = currentDate.toISOString().split('T')[0];
+    const dayLessons = lessons.value.filter(lesson => {
+      const lessonDate = lesson.due_date.split('T')[0];
+      return lessonDate === dateStr;
+    });
+    
+    daysArray.push({
+      date: currentDate.toLocaleDateString('vi-VN', { day: 'numeric', month: 'numeric' }),
+      dayName: currentDate.toLocaleDateString('vi-VN', { weekday: 'long' }),
+      dateObj: new Date(currentDate),
+      isToday: currentDate.toDateString() === now.toDateString(),
+      lessons: dayLessons
+    });
+    
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+  
+  return daysArray;
+});
+
+
 onMounted(async () => {
   const userData = await fetchUserProfile();
   if (userData) {
     user.value = userData;
   }
+
+  lessons.value = await fetchLessons();
+  topics.value = await fetchTopics();
 });
+
 
 //Chuyển trang Thông báo
 const goToNotifications = () => {
@@ -145,7 +320,7 @@ const logout = () => {
 .home-page {
   position: relative;
   height: 100vh;
-  overflow: hidden;
+  overflow-x: hidden;
   background-color: #000;
 }
 
@@ -238,6 +413,170 @@ const logout = () => {
   z-index: 1000;
   border-radius: 10px;
   overflow: hidden;
+}
+
+.schedule-container {
+  max-width: 1200px;
+  margin: 40px auto;
+  padding: 0 20px;
+  position: relative;
+  z-index: 1;
+  color: white;
+}
+
+.schedule-title {
+  text-align: center;
+  margin-bottom: 30px;
+  font-size: 2.5em;
+  color: #fff;
+}
+
+.schedule-filter {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.schedule-filter button {
+  padding: 8px 20px;
+  border: none;
+  border-radius: 20px;
+  background-color: #333;
+  color: white;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.3s;
+}
+
+.schedule-filter button.active {
+  background-color: #4CAF50;
+}
+
+.schedule-filter button:hover {
+  background-color: #555;
+}
+
+.schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 15px;
+}
+
+.schedule-day {
+  background-color: rgba(30, 30, 30, 0.8);
+  border-radius: 10px;
+  padding: 15px;
+  min-height: 300px;
+}
+
+.schedule-day.today {
+  border: 2px solid #4CAF50;
+  background-color: rgba(30, 30, 30, 0.9);
+}
+
+.day-header {
+  text-align: center;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #444;
+}
+
+.day-name {
+  font-weight: bold;
+  font-size: 1.1em;
+  color: #4CAF50;
+}
+
+.day-date {
+  font-size: 0.9em;
+  color: #aaa;
+}
+
+.lessons-list {
+  height: calc(100% - 50px);
+  overflow-y: auto;
+}
+
+.lesson-item {
+  background-color: rgba(50, 50, 50, 0.6);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.lesson-item.done {
+  opacity: 0.7;
+  border-left: 4px solid #4CAF50;
+}
+
+.lesson-item.not-done {
+  border-left: 4px solid #f44336;
+}
+
+.lesson-item.in-progress {
+  border-left: 4px solid #FFC107;
+}
+
+.lesson-time {
+  font-size: 0.8em;
+  color: #aaa;
+  margin-bottom: 5px;
+}
+
+.lesson-info {
+  flex-grow: 1;
+}
+
+.lesson-title {
+  margin: 0 0 5px 0;
+  font-size: 1em;
+}
+
+.lesson-topic {
+  margin: 0;
+  font-size: 0.8em;
+  color: #888;
+}
+
+.lesson-note {
+  margin: 5px 0 0 0;
+  font-size: 0.8em;
+  color: #bbb;
+  font-style: italic;
+}
+
+.lesson-status {
+  text-align: right;
+  font-size: 1.2em;
+}
+
+.no-lessons {
+  text-align: center;
+  color: #666;
+  font-size: 0.9em;
+  padding: 20px 0;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .schedule-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .schedule-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .schedule-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 </style>

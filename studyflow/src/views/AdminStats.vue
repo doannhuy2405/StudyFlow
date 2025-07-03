@@ -249,7 +249,7 @@ const logout = () => {
 
 .content {
   position: relative;
-  z-index: 1;  /* Nằm trên cùng */
+  z-index: 1;  
   color: white;
   align-items: center;
   padding-top: 5px;
