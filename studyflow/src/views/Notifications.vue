@@ -83,6 +83,7 @@ const router = useRouter();
 const user = ref(null);
 const notifications = ref([]);
 
+
 const dropdownOpen = ref(false)
 function toggleDropdown() {
   dropdownOpen.value = !dropdownOpen.value

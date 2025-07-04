@@ -227,6 +227,7 @@
 import NeuralNetworkBg from '@/components/NeuralNetworkBg.vue';
 import { ref, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import Swal from 'sweetalert2';
 
 
 // Import avatar mặc đinh hệ thống
@@ -239,6 +240,8 @@ const lessonsMap = ref({})
 const activeTopic = ref(null)
 const loadingTopics = ref(false)
 const loadingLessons = ref({})
+const hasShownReminderPopup = ref(false); 
+
 const selectedFiles = ref([])
 
 const editingLessonId = ref(null)
@@ -492,6 +495,51 @@ const fetchTopics = async () => {
   }
 }
 
+
+// Hàm lấy thông báo mới và hiển thị popup nếu cần
+const checkReminderPopup = async () => {
+  const token = localStorage.getItem("token");
+  if (!token) return;
+
+  try {
+    const res = await fetch("/api/notifications", {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (!res.ok) return;
+
+    const notifications = await res.json();
+    const latest = notifications?.[0];
+
+    if (!latest || !latest.message.includes("Đã đến giờ học")) return;
+
+    const popupShownKey = "popup_shown_" + new Date().toISOString().slice(0, 10);  
+
+    // Nếu popup hôm nay đã hiện rồi thì không hiện lại nữa
+    if (localStorage.getItem(popupShownKey)) return;
+
+    Swal.fire({
+      title: "⏰ Nhắc học",
+      text: latest.message,
+      icon: "info",
+      confirmButtonText: "Bắt đầu học ngay!"
+    });
+
+    // Phát âm thanh
+    const audio = new Audio("../assets/That_so_true.mp3");
+    audio.play().catch(err => console.warn("Không thể phát âm thanh:", err));
+
+    // Đánh dấu đã hiện
+    localStorage.setItem(popupShownKey, "true");
+
+  } catch (err) {
+    console.error("Lỗi khi check reminder popup:", err);
+  }
+};
+
+
+
+
 // Xác nhận xóa chủ đề
 const confirmDeleteTopic = async (topicId) => {
   if (confirm('Bạn có chắc muốn xóa chủ đề này? Tất cả bài học trong chủ đề cũng sẽ bị xóa.')) {
@@ -601,48 +649,6 @@ const loadLessons = async (topicId) => {
 };
 
 
-// // Sửa thông tin bài học
-// const editLesson = async (lesson) => {
-//   const newName = prompt("Tên mới:", lesson.name);
-//   const newNote = prompt("Ghi chú mới:", lesson.note);
-//   const newDate = prompt("Ngày học dự kiến mới (YYYY-MM-DD):", lesson.due_date);
-
-//   // Validate date format
-//   if (newDate && !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
-//     alert("Sai định dạng ngày (YYYY-MM-DD)");
-//     return;
-//   }
-
-//   const updateData = {};
-//   if (newName !== null && newName !== lesson.name) updateData.name = newName;
-//   if (newNote !== null && newNote !== lesson.note) updateData.note = newNote;
-//   if (newDate !== null && newDate !== lesson.due_date) {
-//     updateData.due_date = newDate + "T00:00:00.000Z"; // Thêm timezone nếu cần
-//   }
-
-//   if (Object.keys(updateData).length === 0) return;
-
-//   try {
-//     const response = await fetch(`/api/lessons/${lesson.id}`, {
-//       method: 'PUT',
-//       headers: { 'Content-Type': 'application/json' },
-//       body: JSON.stringify(updateData),
-//     });
-
-//     if (!response.ok) {
-//       const error = await response.json();
-//       alert(`Lỗi: ${error.detail}`);
-//     } else {
-//       alert("Cập nhật thành công!");
-//       await loadLessons(lesson.topic_id);
-//     }
-//   } catch (error) {
-//     console.error("Lỗi khi cập nhật:", error);
-//     alert("Có lỗi xảy ra!");
-//   }
-// };
-
-
 // Xóa bài học
 const deleteLesson = async (id, topicId) => {
   if (!id || id === 'undefined') {
@@ -742,12 +748,12 @@ async function deleteDocument(topicId, lessonId, documentId) {
 }
 
 
-
 onMounted(async () => {
   const userData = await fetchUserProfile();
   if (userData) {
     user.value = userData;
     await fetchTopics(); 
+    await checkReminderPopup();
   }
 });
 

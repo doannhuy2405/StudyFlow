@@ -180,6 +180,8 @@ const quotes = [
   "Tương lai không được chờ đợi mà nó được tạo ra!",
   "Kỳ tích chỉ nở hoa trên mảnh đất của lòng dũng cảm!",
   "Chiều cao không tính bằng số đo, mà nó được tính từ đỉnh đầu cho tới bầu trời của những ước mơ.",
+  "Xin nhắc lại một lần nữa: 'Nếu bạn không bước, người khác sẽ đá bạn ra khỏi đường đua.'",
+  "Nếu kỳ tích không chiếu cố bạn, hãy biến bản thân trở thành kỳ tích!",
 ]
 
 const randomQuote = ref ('')
