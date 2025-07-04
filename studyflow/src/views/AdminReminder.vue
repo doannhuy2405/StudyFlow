@@ -113,9 +113,39 @@ const fetchAdminProfile = async () => {
     return data; 
   } catch (error) {
     console.error("Error fetching admin profile:", error);
-    router.push("/login"); // Nếu lỗi, quay về login
+    router.push("/login"); 
   }
 };
+
+const saveReminder = async () => {
+  successMsg.value = '';
+  errorMsg.value = '';
+
+  const token = localStorage.getItem("token"); 
+
+  try {
+    const res = await fetch('/api/admin/reminder/default', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}` 
+      },
+      body: JSON.stringify({ time: reminderTime.value })
+    });
+
+    const result = await res.json();
+
+    if (res.ok) {
+      successMsg.value = '✅ Cập nhật giờ nhắc thành công!';
+    } else {
+      errorMsg.value = result?.msg || '❌ Lỗi khi cập nhật.';
+    }
+  } catch (error) {
+    console.error("❌ Lỗi khi gửi request:", error);
+    errorMsg.value = '❌ Gặp lỗi khi gửi dữ liệu.';
+  }
+};
+
 
 // Khởi tạo
 onMounted(async () => {
@@ -150,30 +180,6 @@ onMounted(async () => {
   }
 });
 
-
-const saveReminder = async () => {
-  successMsg.value = '';
-  errorMsg.value = '';
-  try {
-    const res = await fetch('/api/admin/reminder/default', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ time: reminderTime.value })
-    });
-
-    const result = await res.json();
-
-    if (res.ok) {
-      successMsg.value = '✅ Cập nhật giờ nhắc thành công!';
-    } else {
-      errorMsg.value = result?.msg || '❌ Lỗi khi cập nhật.';
-    }
-  } catch (error) {
-    errorMsg.value = '❌ Gặp lỗi khi gửi dữ liệu.';
-  }
-};
 
 // Chuyển trang Quản lý người dùng
 const goToAdminUserList = () => {

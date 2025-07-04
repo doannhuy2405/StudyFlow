@@ -598,10 +598,21 @@ async def update_topic(id: str, topic: TopicCreate):
 # Xóa chủ đề học
 @app.delete("/topics/{id}")
 async def delete_topic(id: str):
-    result = await topics_collection.delete_one({"_id": ObjectId(id)})
+    try:
+        topic_id = ObjectId(id)
+    except errors.InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid topic ID")
+
+    # Xóa chủ đề
+    result = await topics_collection.delete_one({"_id": topic_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Topic not found")
-    return {"msg": "Deleted"}
+
+    # 👉 Xóa tất cả bài học thuộc chủ đề
+    await lessons_collection.delete_many({"topic_id": topic_id})
+
+    return {"msg": "Topic and associated lessons deleted"}
+
 
 
 def serialize_lesson(lesson):
@@ -649,7 +660,6 @@ async def create_lesson(topic_id: str, request: Request, lesson: LessonCreate):
     result = await lessons_collection.insert_one(new_lesson)
     created_lesson = await lessons_collection.find_one({"_id": result.inserted_id})
 
-    # 👉 Đây là phần quan trọng để frontend nhận được `_id`
     created_lesson["_id"] = str(created_lesson["_id"])
     created_lesson["topic_id"] = str(created_lesson["topic_id"])
     created_lesson["user_id"] = str(created_lesson["user_id"])
@@ -790,9 +800,9 @@ async def start_pomodoro(request: Request):
     })
 
     if existing_session:
-        raise HTTPException(
-            status_code=400,
-            detail="Đang có session học tập chưa kết thúc. Hãy kết thúc session hiện tại trước khi bắt đầu Pomodoro"
+        await studysessions_collection.update_one(
+            {"_id": existing_session["_id"]},
+            {"$set": {"end": datetime.now(VN_TZ), "status": "interrupted"}}
         )
 
     start_time = datetime.now(VN_TZ)
@@ -813,6 +823,48 @@ async def start_pomodoro(request: Request):
         "start": start_time,
         "duration": duration,
         "type": "pomodoro"
+    }
+
+
+# Dừng Pomodoro
+@app.post("/pomodoro/stop")
+async def stop_pomodoro(request: Request):
+    """Dừng session Pomodoro hiện tại"""
+    user_id = request.state.user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Chưa xác thực người dùng")
+
+    # Tìm session Pomodoro chưa kết thúc gần nhất
+    session = await studysessions_collection.find_one({
+        "user_id": ObjectId(user_id),
+        "end": {"$exists": False},
+        "type": "pomodoro"
+    }, sort=[("start", -1)])
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Không có session Pomodoro nào đang chạy")
+
+    end_time = datetime.now(VN_TZ)
+    start_time = session["start"].astimezone(VN_TZ) if session["start"].tzinfo else session["start"].replace(tzinfo=timezone.utc).astimezone(VN_TZ)
+    
+    duration = (end_time - start_time).total_seconds()
+
+    # Cập nhật session Pomodoro
+    await studysessions_collection.update_one(
+        {"_id": session["_id"]},
+        {"$set": {
+            "end": end_time,
+            "duration": duration,
+            "status": "completed"
+        }}
+    )
+
+    return {
+        "session_id": str(session["_id"]),
+        "start": start_time,
+        "end": end_time,
+        "duration": duration,
+        "type": session.get("type", "pomodoro")
     }
 
 
@@ -1302,7 +1354,7 @@ async def delete_document(
     except Exception as e:
         print(f"Error deleting file: {str(e)}")
 
-    return {"message": "Document deleted successfully"}
+    return {"message": "Xóa tài liệu thành công!"}
 
 
 # Lấy ID người dùng
@@ -1326,19 +1378,28 @@ async def get_user_notifications(current_user: dict = Depends(get_current_user))
         result = []
         for n in notifications:
             try:
-                timestamp_str = n["timestamp"].isoformat()
+                timestamp = n.get("timestamp")
+                if isinstance(timestamp, datetime):
+                    # Đảm bảo có timezone (UTC)
+                    if timestamp.tzinfo is None:
+                        timestamp = timestamp.replace(tzinfo=timezone.utc)
+                    # Format chuẩn ISO 8601 + hậu tố Z
+                    timestamp_str = timestamp.isoformat().replace("+00:00", "Z")
+                else:
+                    timestamp_str = str(timestamp)
             except Exception as e:
-                print("❌ Lỗi timestamp:", n["timestamp"], "|", str(e))
-                timestamp_str = str(n["timestamp"])  # fallback nếu lỗi
-
+                print("Lỗi timestamp:", n.get("timestamp"), "|", str(e))
+                timestamp_str = str(n.get("timestamp")) 
+                
             result.append({
                 "message": n.get("message", "Không có nội dung"),
                 "timestamp": timestamp_str
             })
 
         return result
+
     except Exception as e:
-        print("🔥 Lỗi route /notifications:", str(e))
+        print("Lỗi route /notifications:", str(e))
         raise HTTPException(status_code=500, detail="Lỗi server khi lấy thông báo")
 
 
@@ -1516,7 +1577,12 @@ async def get_active_level():
 # Hàm gửi thông báo giả lập
 async def notify_user(user, message):
     print(f"Gửi đến {user['fullname']}: {message}")
-
+    await notifications_collection.insert_one({
+        "user_id": str(user["_id"]),
+        "message": message,
+        "timestamp": datetime.utcnow()
+    })
+    
 
 # Job gửi nhắc học mỗi phút
 @app.on_event("startup")
@@ -1526,44 +1592,73 @@ async def start_scheduler():
         now = datetime.now(pytz.timezone("Asia/Ho_Chi_Minh"))
         today_str = now.strftime("%Y-%m-%d")
 
-        # Check MongoDB xem đã gửi hôm nay chưa
-        sent_log = await db["reminder_logs"].find_one({"date": today_str})
-        if sent_log:
-            print("🔁 Đã gửi nhắc học hôm nay rồi.")
-            return
-
         # Lấy giờ nhắc từ DB
         reminder = await reminders_collection.find_one({"type": "default"})
         if not reminder:
             print("⚠️ Không có cấu hình giờ nhắc.")
             return
 
-        reminder_time = reminder.get("time")  # VD: "07:00"
+        reminder_time = reminder.get("time")
         if not reminder_time:
             return
 
         current_time_str = now.strftime("%H:%M")
         if current_time_str != reminder_time:
-            return  # ⏳ Chưa đúng giờ
+            return
+
+        # Kiểm tra log riêng từng giờ
+        log_key = f"{today_str}_{reminder_time}"
+        sent_log = await db["reminder_logs"].find_one({"key": log_key})
+        if sent_log:
+            print(f"🔁 Đã gửi nhắc học lúc {reminder_time} hôm nay rồi.")
+            return
 
         # Gửi thông báo cho tất cả user
         users = await users_collection.find().to_list(None)
         for user in users:
             await notify_user(user, "⏰ Đã đến giờ học rồi!")
 
-            # Ghi vào collection notifications
-            await notifications_collection.insert_one({
-                "user_id": str(user["_id"]),
-                "message": "⏰ Đã đến giờ học rồi!",
-                "timestamp": datetime.utcnow()
-            })
-
-        # Đánh dấu là đã gửi hôm nay
-        await db["reminder_logs"].insert_one({"date": today_str})
-        print(f"✅ Nhắc học đã gửi lúc {current_time_str}")
+        # Đánh dấu là đã gửi hôm nay tại giờ đó
+        await db["reminder_logs"].insert_one({
+            "key": log_key,
+            "date": today_str,
+            "time": reminder_time,
+            "sent_at": now
+        })
+        print(f"Đã gửi nhắc học lúc {current_time_str}")
 
     scheduler.start()
 
+
+
+# Lấy giờ nhắc học mặc định
+@app.get("/admin/reminder/default")
+async def get_default_reminder(token: str = Depends(oauth2_scheme)):
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    if payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Không có quyền truy cập")
+
+    reminder = await reminders_collection.find_one({"type": "default"})
+    return {"time": reminder.get("time") if reminder else None}
+
+
+# Cập nhật giờ nhắc học mặc định
+@app.post("/admin/reminder/default")
+async def update_default_reminder(data: dict, token: str = Depends(oauth2_scheme)):
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    if payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Không có quyền truy cập")
+
+    new_time = data.get("time")
+    if not new_time:
+        raise HTTPException(status_code=400, detail="Thiếu thời gian")
+
+    await reminders_collection.update_one(
+        {"type": "default"},
+        {"$set": {"time": new_time}},
+        upsert=True
+    )
+    return {"message": "Cập nhật thành công"}
 
 #-------------------------------Admin APIs------------------------------------------------------
 

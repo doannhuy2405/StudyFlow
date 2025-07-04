@@ -420,7 +420,7 @@ const logout = () => {
   margin: 40px auto;
   padding: 0 20px;
   position: relative;
-  z-index: 1;
+  z-index: 0;
   color: white;
 }
 

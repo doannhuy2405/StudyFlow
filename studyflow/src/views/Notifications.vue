@@ -251,7 +251,7 @@ const logout = () => {
   align-items: center;
   justify-content: flex-end;
   flex: 1;
-  padding-right: 5px; /* canh khoảng cách với mép phải */
+  padding-right: 5px;
   gap: 15px;
 }
 
@@ -284,10 +284,10 @@ const logout = () => {
   backdrop-filter: blur(10px);
   border-radius: 15px;
   padding: 30px;
-  width: 600px;
+  width: 1100px;
   max-height: 60vh;
   overflow-y: auto;
-  z-index: 2;
+  z-index: 0;
   text-align: center;
 }
 
@@ -324,5 +324,6 @@ const logout = () => {
 .message {
   font-size: 1.1em;
   font-weight: bold;
+  color: white;
 }
 </style>
