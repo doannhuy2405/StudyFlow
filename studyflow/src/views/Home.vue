@@ -241,6 +241,8 @@ const activeTopic = ref(null)
 const loadingTopics = ref(false)
 const loadingLessons = ref({})
 const hasShownReminderPopup = ref(false); 
+const selectedDocumentUrl = ref(null)
+
 
 const selectedFiles = ref([])
 
@@ -513,11 +515,12 @@ const checkReminderPopup = async () => {
 
     if (!latest || !latest.message.includes("Đã đến giờ học")) return;
 
-    const popupShownKey = "popup_shown_" + new Date().toISOString().slice(0, 10);  
+    const popupShownKey = "popup_shown_" + new Date().toISOString().slice(0, 10);  // Ví dụ: popup_shown_2025-07-03
 
     // Nếu popup hôm nay đã hiện rồi thì không hiện lại nữa
     if (localStorage.getItem(popupShownKey)) return;
 
+    // Dù giờ đã qua, miễn là có thông báo "Đã đến giờ học" chưa được hiện hôm nay thì hiện popup
     Swal.fire({
       title: "⏰ Nhắc học",
       text: latest.message,
@@ -526,7 +529,7 @@ const checkReminderPopup = async () => {
     });
 
     // Phát âm thanh
-    const audio = new Audio("../assets/That_so_true.mp3");
+    const audio = new Audio("/studyflow/public/That_so_true.mp3");
     audio.play().catch(err => console.warn("Không thể phát âm thanh:", err));
 
     // Đánh dấu đã hiện
@@ -536,7 +539,6 @@ const checkReminderPopup = async () => {
     console.error("Lỗi khi check reminder popup:", err);
   }
 };
-
 
 
 
