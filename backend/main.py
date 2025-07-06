@@ -192,12 +192,12 @@ def create_token(data: dict, expires_delta: timedelta = timedelta(hours=6)):
 # API Đăng ký người dùng
 @app.post("/auth/register")
 async def register(user: UserRegister):
-    print("Dữ liệu từ frontend:", user.dict())  # In dữ liệu nhận được từ frontend
+    print("Dữ liệu từ frontend:", user.dict())
 
-    # Kiểm tra email và username đã tồn tại chưa
-    if users_collection.find_one({"email": user.email}):
+    # Kiểm tra email và username đã tồn tại chưa - THÊM AWAIT
+    if await users_collection.find_one({"email": user.email}):
         raise HTTPException(status_code=400, detail="Email đã tồn tại!")
-    if users_collection.find_one({"username": user.username}):
+    if await users_collection.find_one({"username": user.username}):
         raise HTTPException(status_code=400, detail="Username đã tồn tại!")
 
     # Băm mật khẩu
@@ -208,18 +208,35 @@ async def register(user: UserRegister):
         "email": user.email,
         "username": user.username,
         "password": hashed_password,
+        "created_at": datetime.utcnow(),  # Thêm ngày tạo
+        "updated_at": datetime.utcnow(),  # Thêm ngày cập nhật
+        "roles": ["user"],  # Thêm role mặc định
+        "active": True      # Kích hoạt tài khoản
     }
-    users_collection.insert_one(new_user)
     
-    # Tạo Token ngay sau khi đăng ký
-    token_data = {"username": user.username, "email": user.email}
+    # THÊM AWAIT cho insert_one
+    result = await users_collection.insert_one(new_user)
+    
+    # Tạo Token với đầy đủ thông tin hơn
+    token_data = {
+        "user_id": str(result.inserted_id),  # Thêm user_id
+        "username": user.username,
+        "email": user.email,
+        "roles": ["user"]
+    }
     token = create_token(token_data)
 
     return {
+        "success": True,  # Thêm trạng thái thành công
         "message": "Đăng ký thành công!",
         "token": token,
-        "username": user.username,
-        "fullname": user.fullname,
+        "user": {
+            "id": str(result.inserted_id),
+            "username": user.username,
+            "email": user.email,
+            "fullname": user.fullname,
+            "role": "user"
+        }
     }
 
 
@@ -271,7 +288,6 @@ async def login(user: UserLogin):
     raise HTTPException(status_code=400, detail="Sai tài khoản hoặc mật khẩu!")
 
     
-    
 # Endpoint kiểm tra thông tin 
 @app.get("/auth/check-user-by-email/{email}")
 async def check_user_by_email(email: str):
@@ -292,59 +308,52 @@ async def check_user_by_uid(uid: str):
 @app.post("/auth/google-login")
 async def google_login(request: Request):
     try:
+        # 1. Lấy và xác thực token Google
         data = await request.json()
         id_token = data.get("token")
-        
         if not id_token:
             raise HTTPException(status_code=400, detail="Thiếu token Google")
 
-        # 1. Xác thực với Firebase
         decoded_token = auth.verify_id_token(id_token)
-        uid = decoded_token["uid"]
         email = decoded_token.get("email")
-        name = decoded_token.get("name", "Người dùng Google")
-        picture = decoded_token.get("picture", "")
-        
         if not email:
-            raise HTTPException(status_code=400, detail="Token không chứa email")
+            raise HTTPException(status_code=400, detail="Token không hợp lệ")
 
-        # 2. Tạo/Tìm user trong MongoDB (sử dụng upsert)
+        # 2. Tìm hoặc tạo user với đầy đủ thông tin BẮT BUỘC
         user_data = {
-            "uid": uid,
             "email": email,
-            "username": email.split("@")[0],  # Tạo username từ email
-            "fullname": name,
-            "photo": picture,
+            "fullname": decoded_token.get("name", email.split("@")[0]),
+            "photo": decoded_token.get("picture", ""),
+            "provider": "google",
             "last_login": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.utcnow(),
+            "roles": ["user"],  # THÊM ROLE MẶC ĐỊNH
+            "active": True,     # KÍCH HOẠT TÀI KHOẢN
+            "verified": True    # COI NHƯ ĐÃ XÁC THỰC EMAIL
         }
 
-        # Sử dụng find_one_and_update với upsert
         result = await users_collection.find_one_and_update(
             {"email": email},
             {
                 "$set": user_data,
                 "$setOnInsert": {
-                    "created_at": datetime.utcnow(),
-                    "roles": ["user"],
-                    "password": ""  #
+                    "username": f"user_{ObjectId()}",  # USERNAME UNIQUE NGẪU NHIÊN
+                    "created_at": datetime.utcnow()
                 }
             },
             upsert=True,
             return_document=ReturnDocument.AFTER
         )
 
-        if not result:
-            raise HTTPException(status_code=500, detail="Không thể lưu user vào database")
-
-        # 3. Tạo JWT token
-        token_data = {
-            "sub": str(result["_id"]),
+        # 3. Tạo token với đủ thông tin NHƯ ĐĂNG NHẬP THƯỜNG
+        token_payload = {
+            "user_id": str(result["_id"]),
             "username": result["username"],
             "email": email,
-            "exp": datetime.utcnow() + timedelta(hours=6)
+            "roles": ["user"],
+            "provider": "google"
         }
-        token = jwt.encode(token_data, SECRET_KEY, algorithm="HS256")
+        token = jwt.encode(token_payload, SECRET_KEY, algorithm="HS256")
 
         return {
             "success": True,
@@ -353,14 +362,16 @@ async def google_login(request: Request):
                 "id": str(result["_id"]),
                 "username": result["username"],
                 "email": email,
-                "fullname": name,
-                "photo": picture
+                "fullname": user_data["fullname"],
+                "role": "user",
+                "photo": user_data["photo"],
+                "provider": "google"
             }
         }
 
     except Exception as e:
-        print(f"🔥 Lỗi: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Lỗi server: {str(e)}")
+        print(f"[GOOGLE LOGIN ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail="Lỗi đăng nhập bằng Google")
     
 
 #Endpoint kiểm tra user

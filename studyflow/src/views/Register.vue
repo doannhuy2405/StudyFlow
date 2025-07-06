@@ -78,22 +78,29 @@ const loginWithGoogle = async () => {
     
     // 2. Lấy ID token
     const idToken = await user.getIdToken()
-    console.log("Google ID Token:", idToken) // Debug token
+    console.log("Google ID Token:", idToken)
 
     // 3. Gửi token lên backend
     const response = await axios.post("/api/auth/google-login", {
       token: idToken  
     }, {
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      withCredentials: true
     })
 
     // 4. Xử lý kết quả
     if (response.data.success) {
       console.log("Đăng nhập thành công:", response.data)
+      
+      // Lưu thông tin user từ backend (không dùng data nữa)
       localStorage.setItem('token', response.data.token)
-      router.push('/home') // Chuyển hướng sau khi đăng nhập
+      localStorage.setItem("user", JSON.stringify(response.data.user))
+      
+      // Chuyển hướng sau khi đăng nhập
+      router.push(response.data.user.role === "admin" ? "/admin" : "/home")
     } else {
       errors.google = response.data.message || "Đăng nhập thất bại"
     }
@@ -101,12 +108,13 @@ const loginWithGoogle = async () => {
   } catch (error) {
     console.error("Lỗi đăng nhập Google:", error)
     
-    // Phân loại lỗi chi tiết
     if (error.response) {
       // Lỗi từ phía server
       errors.google = error.response.data.detail || "Lỗi server"
     } else if (error.code === 'auth/popup-closed-by-user') {
       errors.google = "Bạn đã đóng cửa sổ đăng nhập"
+    } else if (error.code === 'auth/cancelled-popup-request') {
+      errors.google = "Yêu cầu đăng nhập đã bị hủy"
     } else {
       errors.google = "Lỗi hệ thống, vui lòng thử lại"
     }
