@@ -182,7 +182,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 # Hàm tạo JWT token
-def create_token(data: dict, expires_delta: timedelta = timedelta(hours=6)):
+def create_token(data: dict, expires_delta: timedelta = timedelta(hours=24)):
     to_encode = data.copy()
     expire = datetime.utcnow() + expires_delta
     to_encode.update({"exp": expire})

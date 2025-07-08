@@ -120,7 +120,7 @@
 
 <script setup>
 import NeuralNetworkBg from '@/components/NeuralNetworkBg.vue';
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useTimerStore } from '@/stores/timerStore';
 
@@ -129,8 +129,6 @@ import defaultAvatar from '../assets/image/Logo_app.png';
 
 const router = useRouter();
 const user = ref(null);
-// const isTracking = ref(false)
-// const isPomodoro = ref(false)
 const studyHistory = ref([])
 const timerStore = useTimerStore()
 
@@ -206,11 +204,31 @@ function toggleDropdown() {
 
 // Format thời gian đếm lên
 const formattedElapsed = computed(() => {
-  const h = String(Math.floor(elapsedSeconds.value / 3600)).padStart(2, '0');
-  const m = String(Math.floor((elapsedSeconds.value % 3600) / 60)).padStart(2, '0');
-  const s = String(elapsedSeconds.value % 60).padStart(2, '0');
-  return `${h}:${m}:${s}`;
+  const hours = Math.floor(elapsedSeconds.value / 3600);
+  const minutes = Math.floor((elapsedSeconds.value % 3600) / 60);
+  const seconds = elapsedSeconds.value % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  } else {
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+  }
 });
+
+// Tăng mỗi giây khi học
+watch(() => timerStore.isTracking, (isNowTracking) => {
+  if (isNowTracking) {
+    elapsedSeconds.value = 0;
+
+    timerInterval = setInterval(() => {
+      elapsedSeconds.value++;
+    }, 1000);
+  } else {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+});
+
 
 // Format Pomodoro
 const formattedCountdown = computed(() => {
@@ -328,6 +346,12 @@ const fetchStudyHistory = async () => {
   }
 };
 
+
+onUnmounted(() => {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+  }
+});
 
 // Mounted
 onMounted(async () => {
