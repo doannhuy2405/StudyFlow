@@ -217,6 +217,14 @@ const fetchTopics = async () => {
   }
 };
 
+
+// Parse chuỗi ngày theo múi giờ địa phương (tránh bị lệch)
+const parseLocalDate = (dateStr) => {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day); 
+};
+
+
 // Hàm chuyển đổi thời gian
 const formatTime = (dateString) => {
   if (!dateString) return '';
@@ -258,8 +266,8 @@ const days = computed(() => {
   while (currentDate <= endDate) {
     const dateStr = currentDate.toISOString().split('T')[0];
     const dayLessons = lessons.value.filter(lesson => {
-      const lessonDate = lesson.due_date.split('T')[0];
-      return lessonDate === dateStr;
+      const lessonDate = parseLocalDate(lesson.due_date.split('T')[0]);
+      return lessonDate.toDateString() === currentDate.toDateString();
     });
     
     daysArray.push({
