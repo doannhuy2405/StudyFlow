@@ -24,11 +24,11 @@
        <div class="right">
         <div class="dropdown text-end">
           <button
-            class="btn p-0 border-0 bg-transparent d-flex align-items-center gap-2"
-            type="button"
-            data-bs-toggle="dropdown"
-            aria-expanded="false"
-          >
+          class="btn p-0 border-0 bg-transparent d-flex align-items-center gap-2"
+          type="button"
+          @click="toggleDropdown"
+        >
+
             <!-- Avatar -->
             <img :src= "user?.photo || defaultAvatar" alt="avatar" class="avatar" />
             <!-- Tên hiển thị -->
@@ -203,6 +203,7 @@ function toggleDropdown() {
 }
 
 // Format thời gian đếm lên
+// eslint-disable-next-line no-unused-vars
 const formattedElapsed = computed(() => {
   const hours = Math.floor(elapsedSeconds.value / 3600);
   const minutes = Math.floor((elapsedSeconds.value % 3600) / 60);
@@ -231,6 +232,7 @@ watch(() => timerStore.isTracking, (isNowTracking) => {
 
 
 // Format Pomodoro
+// eslint-disable-next-line no-unused-vars
 const formattedCountdown = computed(() => {
   const m = String(Math.floor(countdownSeconds.value / 60)).padStart(2, '0');
   const s = String(countdownSeconds.value % 60).padStart(2, '0');

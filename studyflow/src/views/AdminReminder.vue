@@ -25,9 +25,9 @@
           <button
             class="btn p-0 border-0 bg-transparent d-flex align-items-center gap-2"
             type="button"
-            data-bs-toggle="dropdown"
-            aria-expanded="false"
+            @click="toggleDropdown"
           >
+
             <!-- Avatar -->
             <img :src= "user?.photo || defaultAvatar" alt="avatar" class="avatar" />
             <!-- Tên hiển thị -->
@@ -172,6 +172,7 @@ onMounted(async () => {
       if (data?.time) {
         reminderTime.value = data.time;
       }
+    // eslint-disable-next-line no-unused-vars
     } catch (error) {
       errorMsg.value = 'Không thể tải giờ nhắc.';
     }

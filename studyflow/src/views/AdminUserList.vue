@@ -24,9 +24,9 @@
           <button
             class="btn p-0 border-0 bg-transparent d-flex align-items-center gap-2"
             type="button"
-            data-bs-toggle="dropdown"
-            aria-expanded="false"
+            @click="toggleDropdown"
           >
+
             <!-- Avatar -->
             <img :src="user?.photo || defaultAvatar" alt="avatar" class="avatar" />
             <!-- Tên hiển thị -->

@@ -25,11 +25,11 @@
             <div class="right">
                 <div class="dropdown text-end">
                 <button
-                    class="btn p-0 border-0 bg-transparent d-flex align-items-center gap-2"
-                    type="button"
-                    data-bs-toggle="dropdown"
-                    aria-expanded="false"
+                  class="btn p-0 border-0 bg-transparent d-flex align-items-center gap-2"
+                  type="button"
+                  @click="toggleDropdown"
                 >
+
                     <!-- Avatar -->
                     <img :src= "user?.photo || defaultAvatar" alt="avatar" class="avatar" />
                     <!-- Tên hiển thị -->
@@ -168,6 +168,7 @@ const topic = ref({
 });
 
 
+// eslint-disable-next-line no-unused-vars
 const user_id = JSON.parse(localStorage.getItem("user"))?.id;
 
 // Thêm một bài học mới

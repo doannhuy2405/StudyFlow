@@ -1157,7 +1157,7 @@ async def upload_document_to_lesson(
     topic_id: str,
     lesson_id: str,
     request: Request,
-    files: List[UploadFile] = File(...),  # Thay đổi từ file thành files
+    files: List[UploadFile] = File(...),  
 ):
     """Upload nhiều tài liệu vào bài học"""
     user_id = request.state.user_id
@@ -1190,7 +1190,7 @@ async def upload_document_to_lesson(
             # Lưu file vật lý
             file_size = 0
             with open(file_path, "wb") as buffer:
-                while chunk := await file.read(1024 * 1024):  # 1MB chunks
+                while chunk := await file.read(1024 * 1024):  
                     file_size += len(chunk)
                     buffer.write(chunk)
 
