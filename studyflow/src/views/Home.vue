@@ -1226,7 +1226,7 @@ const logout = () => {
 }
 
 .search-input {
-  padding-right: 35px; /* Tạo khoảng trống cho nút xóa */
+  padding-right: 35px;
 }
 
 </style>
