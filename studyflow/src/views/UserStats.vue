@@ -114,6 +114,7 @@ const graphData = ref([]);
 const router = useRouter();
 
 const dropdownOpen = ref(false)
+// eslint-disable-next-line no-unused-vars
 function toggleDropdown() {
   dropdownOpen.value = !dropdownOpen.value
 }

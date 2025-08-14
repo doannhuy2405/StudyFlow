@@ -56,6 +56,36 @@
         </div>
     </div>
 
+    <!-- Khung tìm kiếm và bộ lọc -->
+    <div class="search-filter-container">
+      <div class="search-box">
+        <i class="fas fa-search"></i>
+        <input 
+          v-model="searchQuery" 
+          type="text" 
+          placeholder="Tìm kiếm chủ đề, bài học..." 
+          class="search-input"
+        >
+      <span 
+        v-if="searchQuery"
+        @click="searchQuery = ''"
+        class="clear-search-btn"
+        style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer;"
+      > 
+      </span>
+      </div>
+      
+      <div class="filter-dropdown">
+        <select v-model="filterStatus" class="filter-select">
+          <option value="all">Tất cả chủ đề</option>
+          <option value="completed">Đã hoàn thành</option>
+          <option value="incomplete">Chưa hoàn thành</option>
+        </select>
+        <i class="fas fa-filter"></i>
+      </div>
+    </div>
+
+
     <!-- Phần thêm chủ đề và danh sách chủ đề -->
     <div class="topic-section">
       <div class="add-topic-container">
@@ -74,13 +104,16 @@
         <p>Bạn vẫn chưa có chủ đề học nào! Hãy tạo chủ đề và cùng tôi học nhé!</p>
       </div>
 
-      <div v-for="topic in topics" :key="topic._id" class="accordion-item bg-dark text-white border-0 mb-4 rounded-lg shadow-md overflow-hidden">
+      <div v-for="topic in filteredTopicsWithLessons" :key="topic._id" class="accordion-item bg-dark text-white border-0 mb-4 rounded-lg shadow-md overflow-hidden">
         <div class="accordion-header bg-primary px-4 py-3 cursor-pointer d-flex justify-content-between align-items-center" @click="toggleTopic(topic._id)">
           <h5 class="mb-0 text-white">{{ topic.name }}</h5>
           <span class="text-white">{{ activeTopic === topic._id ? '▲' : '▼' }}</span>
         </div>
 
         <div v-show="activeTopic === topic._id" class="accordion-body bg-dark p-4" style="color: white;">
+          <div v-if="searchQuery && !filteredLessons[topic._id]?.length" class="no-results">
+            Không tìm thấy bài học phù hợp với "<strong>{{ searchQuery }}</strong>"
+          </div>
           <p style="color: white;">{{ topic.description }}</p>
 
           <div class="d-flex gap-2 mb-3">
@@ -90,7 +123,7 @@
           </div>
 
           <ul class="list-group">
-            <li v-for="lesson in lessonsMap[topic.id]" :key="lesson.id" class="lesson-card">
+            <li v-for="lesson in filteredLessons[topic._id]" :key="lesson.id" class="lesson-card">
               <div>
                 <strong>{{ lesson.name }}</strong>
                 <p>{{ lesson.note }}</p>
@@ -226,7 +259,7 @@
 
 <script setup>
 import NeuralNetworkBg from '@/components/NeuralNetworkBg.vue';
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import Swal from 'sweetalert2';
 
@@ -244,6 +277,10 @@ const loadingLessons = ref({})
 // eslint-disable-next-line no-unused-vars
 const hasShownReminderPopup = ref(false); 
 const selectedDocumentUrl = ref(null)
+
+// Thêm các ref mới
+const searchQuery = ref('')
+const filterStatus = ref('all') // 'all', 'completed', 'incomplete'
 
 
 const selectedFiles = ref([])
@@ -275,6 +312,49 @@ const addLesson = (topicId) => {
 const cancelAddLesson = () => {
   showAddLessonForm.value = null
 }
+
+// Thêm computed property để lọc chủ đề, bài học
+const filteredTopicsWithLessons = computed(() => {
+  const query = searchQuery.value.toLowerCase();
+  return topics.value.filter(topic => {
+    // Lọc theo trạng thái
+    let matchesFilter = true;
+    if (filterStatus.value !== 'all') {
+      const lessons = lessonsMap.value[topic._id] || [];
+      const isCompleted = lessons.length > 0 && lessons.every(lesson => lesson.status === 'done');
+      matchesFilter = filterStatus.value === 'completed' ? isCompleted : !isCompleted;
+    }
+    
+    if (!query) return matchesFilter;
+    
+    // Tìm kiếm trong chủ đề
+    const topicMatches = topic.name.toLowerCase().includes(query) || 
+                        topic.description.toLowerCase().includes(query);
+    
+    // Tìm kiếm trong bài học
+    const lessonMatches = (lessonsMap.value[topic._id] || []).some(lesson => 
+      lesson.name.toLowerCase().includes(query) ||
+      lesson.note.toLowerCase().includes(query));
+    
+    return matchesFilter && (topicMatches || lessonMatches);
+  });
+});
+
+const filteredLessons = computed(() => {
+  const query = searchQuery.value.toLowerCase();
+  const result = {};
+  
+  for (const topic of topics.value) {
+    const lessons = lessonsMap.value[topic._id] || [];
+    result[topic._id] = query 
+      ? lessons.filter(lesson => 
+          lesson.name.toLowerCase().includes(query) ||
+          lesson.note.toLowerCase().includes(query))
+      : lessons;
+  }
+  
+  return result;
+});
 
 // Xử lý chọn nhiều file
 const handleMultipleFilesUpload = (event) => {
@@ -1027,6 +1107,126 @@ const logout = () => {
 .bg-primary {
   --bs-bg-opacity: 1;
   background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.search-filter-container {
+  display: flex;
+  gap: 15px;
+  margin: 20px 0;
+  padding: 0 15px;
+  align-items: center;
+  flex-wrap: nowrap; /* Đổi từ wrap sang nowrap */
+  width: 100%;
+  position: relative; /* Thêm position relative */
+}
+
+.search-box {
+  position: relative;
+  flex-grow: 2; /* Tăng flex-grow để chiếm nhiều không gian hơn */
+  width: 80%; /* Chiếm 200% width */
+  max-width: none; /* Bỏ max-width cũ */
+}
+
+.search-box i {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #aaa;
+}
+
+.search-input {
+  width: 82%;
+  padding: 10px 15px 10px 40px;
+  border: 1px solid #444;
+  border-radius: 30px;
+  background-color: #2a2a2a;
+  color: white;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.filter-dropdown {
+  position: absolute; /* Đổi thành absolute */
+  right: 15px; /* Đẩy sang bên phải */
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1; /* Đảm bảo nằm trên các phần tử khác */
+}
+
+.filter-dropdown i {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #aaa;
+  pointer-events: none;
+}
+
+.filter-select {
+  padding: 10px 35px 10px 15px;
+  border: 1px solid #444;
+  border-radius: 30px;
+  background-color: #2a2a2a;
+  color: white;
+  font-size: 14px;
+  appearance: none;
+  cursor: pointer;
+  min-width: 200px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .search-filter-container {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  
+  .search-box {
+    width: 100%;
+  }
+  
+  .filter-dropdown {
+    position: relative;
+    right: auto;
+    top: auto;
+    transform: none;
+    align-self: flex-end;
+  }
+}
+
+.no-results {
+  color: #aaa;
+  padding: 10px;
+  text-align: center;
+  font-style: italic;
+}
+
+.no-results strong {
+  color: #fff;
+  font-style: normal;
+}
+
+
+.clear-search-btn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #aaa;
+  cursor: pointer;
+  padding: 0 5px;
+}
+
+.clear-search-btn:hover {
+  color: #fff;
+}
+
+.search-input {
+  padding-right: 35px; /* Tạo khoảng trống cho nút xóa */
 }
 
 </style>
