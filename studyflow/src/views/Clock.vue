@@ -1,3 +1,5 @@
+<!-- eslint-disable vue/multi-word-component-names -->
+<!-- eslint-disable-next-line vue/multi-word-component-names -->
 <template>
   <div class="clock-page">
     
@@ -56,7 +58,7 @@
       </div>
     </div>
     
-      <!-- Nút bắt đầu học -->
+    <!-- Nút bắt đầu học -->
     <div class="header">
       <div class="timer-buttons">
         <button class="btn btn-outline-warning" @click="startStudyMode">

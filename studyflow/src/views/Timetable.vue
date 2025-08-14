@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/multi-word-component-names -->
 <template>
   <div class="home-page">
     
@@ -98,7 +99,9 @@
                 'not-done': lesson.status === 'not_done',
                 'in-progress': lesson.status === 'in_progress'
               }"
+              @click="toggleLessonStatus(lesson)"
             >
+
               <div class="lesson-time">{{ formatTime(lesson.due_date) }}</div>
               <div class="lesson-info">
                 <h4 class="lesson-title">{{ lesson.name }}</h4>
@@ -141,6 +144,7 @@ const formatDate = (date) => {
 
 
 const dropdownOpen = ref(false)
+// eslint-disable-next-line no-unused-vars
 function toggleDropdown() {
   dropdownOpen.value = !dropdownOpen.value
 }
@@ -218,6 +222,50 @@ const fetchTopics = async () => {
 };
 
 
+// Thay đổi trạng thái bài học
+const toggleLessonStatus = async (lesson) => {
+  // Xác định ID
+  const id = lesson._id || lesson.id || lesson.lesson_id;
+  if (!id) {
+    console.error('Không tìm thấy ID của bài học:', lesson);
+    return;
+  }
+
+  // Xác định trạng thái tiếp theo (xoay vòng)
+  let newStatus;
+  if (lesson.status === 'not_done') newStatus = 'in_progress';
+  else if (lesson.status === 'in_progress') newStatus = 'done';
+  else newStatus = 'not_done';
+
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) throw new Error("Token không tồn tại");
+
+    const response = await fetch(`/api/lessons/${id}`, {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ status: newStatus }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      console.error('Lỗi cập nhật trạng thái:', data.detail || data);
+      return;
+    }
+
+    // Cập nhật trên frontend
+    lesson.status = newStatus;
+    console.log('Cập nhật trạng thái thành công');
+  } catch (err) {
+    console.error('Lỗi khi cập nhật trạng thái:', err);
+  }
+};
+
+
+
 // Parse chuỗi ngày theo múi giờ địa phương (tránh bị lệch)
 const parseLocalDate = (dateStr) => {
   const [year, month, day] = dateStr.split('-').map(Number);
@@ -264,6 +312,7 @@ const days = computed(() => {
   const currentDate = new Date(startDate);
   
   while (currentDate <= endDate) {
+    // eslint-disable-next-line no-unused-vars
     const dateStr = currentDate.toISOString().split('T')[0];
     const dayLessons = lessons.value.filter(lesson => {
       const lessonDate = parseLocalDate(lesson.due_date.split('T')[0]);

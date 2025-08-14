@@ -10,7 +10,7 @@ let animationId = null;
 
 // Cấu hình mạng nơ-ron
 const config = {
-  nodeCount: 350,
+  nodeCount: 250,
   lineWidth: 1,
   lineColor: 'rgba(0, 255, 255, 1)',
   nodeColor: 'rgba(0, 255, 255, 1)',

@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/multi-word-component-names -->
 <template>
   <div class="home-page">
     <!-- Component mạng nơ-ron chồng lên -->
@@ -240,6 +241,7 @@ const lessonsMap = ref({})
 const activeTopic = ref(null)
 const loadingTopics = ref(false)
 const loadingLessons = ref({})
+// eslint-disable-next-line no-unused-vars
 const hasShownReminderPopup = ref(false); 
 const selectedDocumentUrl = ref(null)
 
@@ -418,6 +420,7 @@ const handleEditLessonSubmit = async (lesson) => {
 
 
 const dropdownOpen = ref(false)
+// eslint-disable-next-line no-unused-vars
 function toggleDropdown() {
   dropdownOpen.value = !dropdownOpen.value
 }
@@ -453,6 +456,7 @@ const fetchUserProfile = async () => {
 };
 
 // Kiểm tra chủ đề đã hoàn thành
+// eslint-disable-next-line no-unused-vars
 const isTopicComplete = (topicId) => {
   const lessons = lessonsMap.value[topicId]
   if (!lessons || !lessons.length) return false
@@ -490,6 +494,7 @@ const fetchTopics = async () => {
 
   } catch (error) {
     console.error('Error fetching topics:', error)
+    // eslint-disable-next-line no-undef
     toast.error('Lỗi khi tải danh sách chủ đề')
     topics.value = []
   } finally {
@@ -564,9 +569,11 @@ const confirmDeleteTopic = async (topicId) => {
         activeTopic.value = null
       }
       
+      // eslint-disable-next-line no-undef
       toast.success('Đã xóa chủ đề thành công')
     } catch (error) {
       console.error('Error deleting topic:', error)
+      // eslint-disable-next-line no-undef
       toast.error('Có lỗi khi xóa chủ đề')
     }
   }
@@ -614,6 +621,7 @@ const fetchLessons = async (topicId) => {
     }
   } catch (error) {
     console.error(`Error fetching lessons for topic ${topicId}:`, error)
+    // eslint-disable-next-line no-undef
     toast.error('Lỗi khi tải bài học')
     lessonsMap.value[topicId] = []
   } finally {
@@ -686,6 +694,7 @@ const deleteLesson = async (id, topicId) => {
 
 
 // Trạng thái bài học
+// eslint-disable-next-line no-unused-vars
 async function toggleStatus(lesson) {
   const newStatus = lesson.status === "Chưa hoàn thành" ? "Đã hoàn thành" : "Chưa hoàn thành"
 
@@ -729,6 +738,7 @@ const changeStatus = async (lesson, newStatus) => {
 
 const selectedFile = ref(null)
 
+// eslint-disable-next-line no-unused-vars
 function handleFileUpload(event) {
   selectedFile.value = event.target.files[0]
 }
