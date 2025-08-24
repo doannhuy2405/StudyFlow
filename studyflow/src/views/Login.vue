@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/multi-word-component-names -->
 <template>
   <div class="login-page">
     
@@ -156,7 +157,7 @@ const handleLogin = async () => {
 
     // Phân quyền chuyển hướng
     if (user.role === "admin") {
-      router.push("/admin");
+      router.push("/adminuserlist");
     } else {
       router.push("/home");
     }

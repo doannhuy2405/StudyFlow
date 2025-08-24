@@ -51,7 +51,7 @@ const quotes = [
   "Dừng những việc làm bạn hao tổn tinh thần, dừng những việc không có ý nghĩa. Cậu nên dành thời gian đó để đọc sách, để vận động, để yêu thương, để cố gắng chạm tới cuộc sống mà bạn mong muốn.",
   "Đừng cảm thấy 'một mình' là kỳ quái. Những ngày bình thường luôn yên lặng, an tĩnh như thế. Cũng đừng sợ rằng nỗ lực không có kết quả, sự lo lắng chỉ làm bạn thêm gánh nặng mà thôi.",
   "Còn chưa tới cuối cùng sao bạn biết rằng mình không thể?",
-  "Vứt bỏ thái độ không tốt, vứt bỏ thói quen trì hoãn. Đã xác định đi con đường nào thì đừng chỉ lo để ý nó còn bao xa, chỉ cần tiến bước về phía trước, mỗi dấu chân của bạn đểu sẽ trở thành kinh nghiệm và sức mạnh cho bạn sau này!",
+  "Vứt bỏ thái độ không tốt, vứt bỏ thói quen trì hoãn. Đã xác định đi con đường nào thì đừng chỉ lo để ý nó còn bao xa, chỉ cần tiến bước về phía trước, mỗi dấu chân của bạn đều sẽ trở thành kinh nghiệm và sức mạnh cho bạn sau này!",
   "Yên lặng mà làm, đợi thành công rồi nói tiếp!", 
   "Trạng thái tốt nhất của một người chính là biết bản thân mình muốn gì và dốc hết sức vì nó.",
   "Có những việc, không phải cứ nhìn thấy hy vọng thì mới kiên trì, mà là phải kiên trì thì mới có thể nhìn thấy.",

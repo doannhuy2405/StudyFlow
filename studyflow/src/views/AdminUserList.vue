@@ -24,11 +24,11 @@
           <button
             class="btn p-0 border-0 bg-transparent d-flex align-items-center gap-2"
             type="button"
-            @click="toggleDropdown"
+            data-bs-toggle="dropdown"
+            aria-expanded="false"
           >
-
             <!-- Avatar -->
-            <img :src="user?.photo || defaultAvatar" alt="avatar" class="avatar" />
+            <img :src= "user?.photo || defaultAvatar" alt="avatar" class="avatar" />
             <!-- Tên hiển thị -->
             <span class="username">{{ user?.fullname }}</span>
           </button>
@@ -37,13 +37,13 @@
           <div class="dropdown-menu dropdown-menu-end p-2" style="width: 220px;">
             <div class="card border-0 text-center bg-dark text-white">
               <img
-                :src="user?.photo || defaultAvatar"
+                :src= "user?.photo || defaultAvatar"
                 class="card-img-top rounded-circle mx-auto mt-2"
                 style="width: 60px; height: 60px; object-fit: cover;"
                 alt="avatar"
               />
               <div class="card-body p-2">
-                <h6 class="card-title mb-1">{{ user?.fullname }}</h6>
+                <h6 class="card-title mb-1">{{user?.fullname}}</h6>
                 <p class="card-text" style="font-size: 0.8em;">{{ user?.email }}</p>
                 <a href="#" class="btn btn-sm btn-outline-danger w-100" @click="logout">Đăng xuất</a>
               </div>
@@ -139,7 +139,7 @@
       <div v-if="showAddUserModal" class="user-modal">
         <div class="modal-content">
           <div class="modal-header">
-            <h3>Thêm người dùng mới</h3>
+            <h3 style="color: white; text-align: center;">Thêm người dùng mới</h3>
             <button @click="showAddUserModal = false" class="close-btn">
               <i class="bi bi-x"></i>
             </button>
@@ -211,7 +211,6 @@ import defaultAvatar from '@/assets/image/Logo_app.png';
 const router = useRouter();
 const users = ref ([])
 const user = ref(null);
-const dropdownOpen = ref(false);
 
 const lockUser = (userId) => toggleUserLock(userId, true);
 const unlockUser = (userId) => toggleUserLock(userId, false);
@@ -252,10 +251,7 @@ const filteredUsers = computed(() => {
   return result;
 });
 
-// Hàm cho admin
-const toggleDropdown = () => {
-  dropdownOpen.value = !dropdownOpen.value;
-};
+
 
 // Thông tin admin
 const fetchAdminProfile = async () => {
@@ -527,7 +523,7 @@ onMounted(async () => {
   bottom: 0;
   padding: 20px;
   overflow-y: auto;
-  z-index: 0;
+  /* z-index: 0; */
 }
 
 .user-management-header {
@@ -758,6 +754,7 @@ onMounted(async () => {
   overflow: hidden;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
   padding: 20px ;
+  z-index: 2;
 }
 
 .modal-header {

@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/multi-word-component-names -->
 <template>
   <div class="notification-page">
     
@@ -84,10 +85,10 @@ const user = ref(null);
 const notifications = ref([]);
 
 
-const dropdownOpen = ref(false)
-function toggleDropdown() {
-  dropdownOpen.value = !dropdownOpen.value
-}
+// const dropdownOpen = ref(false)
+// function toggleDropdown() {
+//   dropdownOpen.value = !dropdownOpen.value
+// }
 
 // Lấy thông tin người dùng
 const fetchUserProfile = async () => {

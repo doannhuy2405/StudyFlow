@@ -25,9 +25,9 @@
           <button
             class="btn p-0 border-0 bg-transparent d-flex align-items-center gap-2"
             type="button"
-            @click="toggleDropdown"
+            data-bs-toggle="dropdown"
+            aria-expanded="false"
           >
-
             <!-- Avatar -->
             <img :src= "user?.photo || defaultAvatar" alt="avatar" class="avatar" />
             <!-- Tên hiển thị -->
@@ -90,10 +90,6 @@ const reminderTime = ref('');
 const successMsg = ref('');
 const errorMsg = ref('');
 
-const dropdownOpen = ref(false)
-function toggleDropdown() {
-  dropdownOpen.value = !dropdownOpen.value
-}
 
 // Lấy thông tin admin
 const fetchAdminProfile = async () => {

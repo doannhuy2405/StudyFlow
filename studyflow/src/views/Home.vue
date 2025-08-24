@@ -1151,7 +1151,7 @@ const logout = () => {
   right: 15px; /* Đẩy sang bên phải */
   top: 50%;
   transform: translateY(-50%);
-  z-index: 1; /* Đảm bảo nằm trên các phần tử khác */
+  z-index: 0; /* Đảm bảo nằm trên các phần tử khác */
 }
 
 .filter-dropdown i {
