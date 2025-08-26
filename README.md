@@ -1,7 +1,7 @@
-StudyFlow - Hướng Dẫn Cài Đặt & Chạy Dự Án
+# StudyFlow - Hướng Dẫn Cài Đặt & Chạy Dự Án
 Hướng dẫn này sẽ giúp bạn cài đặt và chạy dự án StudyFlow trên môi trường local.
 
-1.  Điều Kiện Tiên Quyết
+# 1.  Điều Kiện Tiên Quyết
 Trước khi bắt đầu, hãy đảm bảo máy bạn đã cài đặt:
 
 Node.js (version 18.x trở lên)
@@ -12,7 +12,7 @@ Python (version 3.9 trở lên)
 
 MongoDB (local hoặc MongoDB Atlas)
 
-2. Cài Đặt & Chạy Frontend (Vue.js + Vite)
+# 2. Cài Đặt & Chạy Frontend (Vue.js + Vite)
   2.1. Clone repository
     bash
     git clone <your-repo-url>
@@ -37,7 +37,7 @@ MongoDB (local hoặc MongoDB Atlas)
     bash
     npm run build
    
-4. Cài Đặt & Chạy Backend (FastAPI)
+# 3. Cài Đặt & Chạy Backend (FastAPI)
   3.1. Vào thư mục backend
     bash
     cd backend
@@ -70,7 +70,7 @@ MongoDB (local hoặc MongoDB Atlas)
     API sẽ chạy tại: http://localhost:8000
     Documentation API: http://localhost:8000/docs
 
-4. Triển Khai Production
+# 4. Triển Khai Production
 Frontend (Vite)
 bash
 npm run build
@@ -81,7 +81,8 @@ Sử dụng Uvicorn với worker:
 
 bash
 uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
-5. Xử Lý Lỗi Thường Gặp
+
+# 5. Xử Lý Lỗi Thường Gặp
 Lỗi CORS: Đảm bảo backend đã cấu hình CORS cho frontend URL
 
 Lỗi kết nối MongoDB: Kiểm tra MongoDB đang chạy và connection string
