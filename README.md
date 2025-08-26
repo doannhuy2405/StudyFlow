@@ -16,7 +16,7 @@ MongoDB (local hoặc MongoDB Atlas)
   2.1. Clone repository
     bash
     git clone <your-repo-url>
-    cd studyflow-frontend
+    cd studyflow
    
    2.2. Cài đặt dependencies
     Sử dụng npm (hoặc yarn/pnpm):
